@@ -23,7 +23,8 @@ class Compiler
   end
 
   def parse
-    statement until eof?
+    statement
+    expression; newline
     [@data, @bss, @code]
   end
 
@@ -59,25 +60,33 @@ class Compiler
     end
   end
 
-  # Recognize an alphabetical character
+  # Recognize an alphabetical character.
   def alpha?(char)
     ('A'..'Z') === char.upcase
   end
 
-  # Recognize a decimal digit
+  # Recognize a decimal digit.
   def digit?(char)
     ('0'..'9') === char
   end
 
-  # Get an identifier
-  def get_name
-    expected('identifier') unless alpha?(@look)
-    c = @look
-    get_char
-    return c
+  # Recognize an alphanumeric character.
+  def alnum?(char)
+    alpha?(char) || digit?(char)
   end
 
-  # Get a number
+  # Get an identifier.
+  def get_name
+    expected('identifier') unless alpha?(@look)
+    token = ''
+    while alnum?(@look)
+      token << @look
+      get_char
+    end
+    token
+  end
+
+  # Get a number.
   def get_num
     expected('integer') unless digit?(@look)
     c = @look
