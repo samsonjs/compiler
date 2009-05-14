@@ -9,19 +9,31 @@
 class ParseError < StandardError; end 
 
 class Compiler
-  def initialize(input=STDIN, output=STDOUT)
+  attr_reader :data, :bss, :code
+  
+  def initialize(input=STDIN)
     @look = ''                   # next lookahead char
     @input = input               # stream to read from
-    @output = output             # stream to write to
+    @data = ''                   # data section
+    @bss = ''                    # bss section
+    @code = ''                   # code section
 
     # seed the lexer
     get_char
   end
 
+  def parse
+    statement until eof?
+    [@data, @bss, @code]
+  end
+
   # Read the next character from the input stream
   def get_char
-    @look = @input.getc
-    @look = @look.chr if @look
+    @look = if @input.eof?
+              nil
+            else
+              @input.readbyte.chr 
+            end
   end
 
   # Report error and halt
@@ -34,7 +46,7 @@ class Compiler
     if eof?
       raise ParseError, "Premature end of file, expected: #{what}."
     else
-      raise ParseError, "Expected: #{what}, got: #{@look}."
+      raise ParseError, "Expected: #{what}, got: #{@look} (##{@look[0]})."
     end
   end
   
@@ -48,18 +60,18 @@ class Compiler
   end
 
   # Recognize an alphabetical character
-  def is_alpha(char)
+  def alpha?(char)
     ('A'..'Z') === char.upcase
   end
 
   # Recognize a decimal digit
-  def is_digit(char)
+  def digit?(char)
     ('0'..'9') === char
   end
 
   # Get an identifier
   def get_name
-    expected('identifier') unless is_alpha(@look)
+    expected('identifier') unless alpha?(@look)
     c = @look
     get_char
     return c
@@ -67,29 +79,60 @@ class Compiler
 
   # Get a number
   def get_num
-    expected('integer') unless is_digit(@look)
+    expected('integer') unless digit?(@look)
     c = @look
     get_char
     return c
   end
 
-  # Print a tab followed by a string and a newline
+  # Define a constant in the .data section.
+  def equ(name, value)
+    @data << "#{name}\tequ  #{value}"
+  end
+
+  # Define a variable with the given name and size (in dwords).
+  def var(name, dwords=1)
+    @bss << "#{name}: resd #{dwords}\n"
+  end
+
+  # Emit a line of code wrapped between a tab and a newline.
   def emit(s)
-    @output.puts("\t#{s}")
+    @code << "\t#{s}\n"
+  end
+
+  # Parse and translate an identifier or function call.
+  def identifier
+    name = get_name
+
+    if @look == '('
+      # function call
+      match('(')
+      match(')')
+      call(name)
+    else
+      # variable access
+      mov("eax", "dword [#{name}]")
+    end
   end
 
   # Parse and translate a single factor.  Result is in eax.
   def factor
-    if @look == '('
+    case 
+    when @look == '('
       match('(')
       expression
       match(')')
+    when alpha?(@look)
+      identifier
+    when digit?(@look)
+      mov("eax", get_num)
     else
-      emit("mov eax, #{get_num}")
+      expected("a number, identifier, or an expression wrapped in parens")
     end
   end
 
-  # Parse and translate a single term.  Result is in eax.
+  # Parse and translate a single term (factor or mulop).  Result is in
+  # eax.
   def term
     factor                      # Result in eax.
     while mulop?
@@ -97,25 +140,25 @@ class Compiler
       # multiply & divide.  Because they leave their results in eax
       # associativity works.  Each interim result is pushed on the
       # stack here.
-      emit("push eax")
+      push("eax")
 
-      case @look
-      when '*': multiply
-      when '/': divide
+      if @look == '*'
+        multiply
       else
-        expected('Multiplication or division operator (* or /)')
+        divide
       end
-      emit("add esp, 4")        # Remove the 1st factor from the stack.
+
+      add("esp", 4)        # Remove the 1st factor from the stack.
     end
   end
 
-  # Parse and translate a mathematical expression of terms.  Result is
+  # Parse and translate a general expression of terms.  Result is
   # in eax.
   def expression
     if addop?
       # Clear eax simulating a zero before unary plus and minus
       # operations.
-      emit("xor eax, eax")
+      xor("eax", "eax")
     else
       term                      # Result is in eax.
     end
@@ -125,24 +168,49 @@ class Compiler
       # subtract.  Because they leave their results in eax
       # associativity works.  Each interim result is pushed on the
       # stack here.
-      emit("push eax")
+      push("eax")
 
-      case @look
-      when '+': add
-      when '-': subtract
+      if @look == '+'
+        add
       else
-        expected('Addition or subtraction operator (+ or -)')
+        subtract
       end
-      emit("add esp, 4")        # Remove 1st term (a) from the stack.
+
+      add("esp", 4)        # Remove 1st term (a) from the stack.
     end
   end
+
+  # Parse an assignment statement.  Value is in eax.
+  def assignment
+    name = get_name
+    match('=')
+    expression
+    var(name)
+    mov("dword [#{name}]", "eax")
+  end
+
+  # Parse one or more newlines.
+  def newline
+    if @look == "\n" || @look == "\r"
+      get_char while @look == "\n" || @look == "\r"
+    else
+      expected('newline')
+    end
+  end
+
+  # Parse an assignment expression followed by a newline.
+  def statement
+    assignment
+    newline
+  end
+
 
   # Parse an addition operator and the 2nd term (b).  The result is
   # left in eax.  The 1st term (a) is expected on the stack.
   def add
     match('+')
     term                        # Result is in eax.
-    emit("add eax, [esp]")      # Add a to b.
+    add('eax', '[esp]')         # Add a to b.
   end
 
   # Parse a subtraction operator and the 2nd term (b).  The result is
@@ -150,8 +218,8 @@ class Compiler
   def subtract
     match('-')
     term                      # Result is in eax.
-    emit("sub eax, [esp]")    # Subtract a from b (this is backwards).
-    emit("neg eax")           # Fix things up.  -(b-a) == a-b
+    sub('eax', '[esp]')       # Subtract a from b (this is backwards).
+    neg('eax')                # Fix things up.  -(b-a) == a-b
   end
 
   # Parse an addition operator and the 2nd term (b).  The result is
@@ -159,7 +227,7 @@ class Compiler
   def multiply
     match('*')
     factor                      # Result is in eax.
-    emit("imul dword [esp]")    # Multiply a by b.
+    imul('dword [esp]')         # Multiply a by b.
   end
 
   # Parse a division operator and the divisor (b).  The result is
@@ -167,10 +235,16 @@ class Compiler
   def divide
     match('/')
     factor                      # Result is in eax.
-    emit("xchg eax, [esp]")     # Swap the divisor and dividend into
+    xchg('eax', '[esp]')        # Swap the divisor and dividend into
                                 # the correct places.
-    emit("idiv dword [esp]")    # Divide a (eax) by b ([esp]).
+    idiv('dword [esp]')         # Divide a (eax) by b ([esp]).
   end
+
+
+
+#######
+private
+#######
 
   def eof?
     @input.eof? && @look.nil?
@@ -182,5 +256,44 @@ class Compiler
 
   def mulop?
     @look == '*' || @look == '/'
+  end
+
+
+  # Some asm methods for convenience and arity checks.
+
+  def mov(dest, src)
+    emit("mov #{dest}, #{src}")
+  end
+
+  def add(dest, src)
+    emit("add #{dest}, #{src}")
+  end
+
+  def sub(dest, src)
+    emit("sub #{dest}, #{src}")
+  end
+
+  def imul(op)
+    emit("imul #{op}")
+  end
+
+  def idiv(op)
+    emit("idiv #{op}")
+  end
+
+  def push(reg)
+    emit("push #{reg}")
+  end
+
+  def call(label)
+    emit("call #{label}")
+  end
+
+  def neg(reg)
+    emit("neg #{reg}")
+  end
+
+  def xchg(op1, op2)
+    emit("xchg #{op1}, #{op2}")
   end
 end
