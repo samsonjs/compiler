@@ -25,7 +25,7 @@ def main(arg)
             File.open(arg)
           else
             # StringIO.new("5*(3-5)*2+2-9/3-8/2-4*(5+5+5)\n")
-            StringIO.new("abc=9\nabc-9\n")
+            StringIO.new("abc=999\nabc-888\n")
           end
   data, bss, code = *parse(input)
   template = File.read("template.asm")

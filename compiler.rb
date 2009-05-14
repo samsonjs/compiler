@@ -89,9 +89,12 @@ class Compiler
   # Get a number.
   def get_num
     expected('integer') unless digit?(@look)
-    c = @look
-    get_char
-    return c
+    value = ''
+    while digit?(@look)
+      value << @look
+      get_char
+    end
+    value
   end
 
   # Define a constant in the .data section.
