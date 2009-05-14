@@ -80,13 +80,19 @@ class Compiler
 
   # Parse and translate a single factor.  Result is in eax.
   def factor
-    emit("mov eax, #{get_num}")
+    if @look == '('
+      match('(')
+      expression
+      match(')')
+    else
+      emit("mov eax, #{get_num}")
+    end
   end
 
   # Parse and translate a single term.  Result is in eax.
   def term
     factor                      # Result in eax.
-    while ['*', '/'].include?(@look)
+    while mulop?
       # Stash the 1st factor on the stack.  This is expected by
       # multiply & divide.  Because they leave their results in eax
       # associativity works.  Each interim result is pushed on the
@@ -106,9 +112,15 @@ class Compiler
   # Parse and translate a mathematical expression of terms.  Result is
   # in eax.
   def expression
-    term                        # Result is in eax.
+    if addop?
+      # Clear eax simulating a zero before unary plus and minus
+      # operations.
+      emit("xor eax, eax")
+    else
+      term                      # Result is in eax.
+    end
 
-    while ['+', '-'].include?(@look)
+    while addop?
       # Stash the 1st term on the stack.  This is expected by add &
       # subtract.  Because they leave their results in eax
       # associativity works.  Each interim result is pushed on the
@@ -162,5 +174,13 @@ class Compiler
 
   def eof?
     @input.eof? && @look.nil?
+  end
+
+  def addop?
+    @look == '+' || @look == '-'
+  end
+
+  def mulop?
+    @look == '*' || @look == '/'
   end
 end
