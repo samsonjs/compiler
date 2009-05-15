@@ -150,14 +150,13 @@ class Compiler
 
   # Parse and translate a single factor.  Result is in eax.
   def factor
-    case 
-    when @look == '('
+    if @look == '('
       match('(')
       expression
       match(')')
-    when alpha?(@look)
+    elsif alpha?(@look)
       identifier
-    when digit?(@look)
+    elsif digit?(@look)
       x86_mov(:eax, get_num)
     else
       expected("a number, identifier, or an expression wrapped in parens")
@@ -250,9 +249,9 @@ class Compiler
   # left in eax.  The 1st term (a) is expected on the stack.
   def subtract
     match('-')
-    term                      # Result is in eax.
-    x86_sub(:eax, '[esp]')       # Subtract a from b (this is backwards).
-    x86_neg(:eax)                # Fix things up.  -(b-a) == a-b
+    term                      # Result, b, is in eax.
+    x86_neg(:eax)             # Fake the subtraction.  a - b == a + -b
+    x86_add(:eax, '[esp]')    # Add a and -b.
   end
 
   # Parse an addition operator and the 2nd term (b).  The result is
