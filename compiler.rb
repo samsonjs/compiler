@@ -24,7 +24,9 @@ class Compiler
     @code = ''                   # code section
     @vars = {}                   # symbol table
     @num_labels = 0              # used to generate unique labels
-    @keywords = %w[i e]          # reserved words (... constant?)
+    @num_labels_with_suffix = Hash.new(0)
+    @keywords = %w[i l e]        # reserved words (... constant?)
+    @num_conditions = 0
 
     # seed the lexer
     get_char
@@ -129,7 +131,7 @@ class Compiler
   def statement
     case @look
     when 'i'
-      if_stmt
+      if_else_stmt
     else
       assignment
       newline
@@ -138,7 +140,7 @@ class Compiler
 
   # Parse a code block.
   def block
-    until @look == 'e' || eof?
+    until @look == 'l' || @look == 'e' || eof?
       statement
       skip_any_whitespace
     end
@@ -147,17 +149,38 @@ class Compiler
   # Parse an if statement.
   def if_stmt
     match('i')
-    label = unique_label
     condition
+    label = unique_label(:end)
     x86_jz(label)
     block
     match('e')
     emit_label(label)
   end
 
+  # Parse an if-else statement.
+  def if_else_stmt
+    match('i')
+    condition
+    else_label = unique_label(:else)
+    end_label = unique_label(:end)
+    x86_jz(else_label)
+    block
+    if @look == 'l'
+      match('l')
+      x86_jmp(end_label)
+      emit_label(else_label)
+      block
+    else
+      emit_label(else_label)    # we end up with an extra label, oh well
+    end
+    match('e')
+    emit_label(end_label)
+  end
+
   # Dummy condition function.  Will handle boolean expressions later.
   def condition
-    emit('<condition>')
+    @num_conditions += 1
+    emit("<condition ##{@num_conditions}>")
   end
 
   # Parse an addition operator and the 2nd term (b).  The result is
@@ -352,9 +375,13 @@ class Compiler
   end
 
   # Generate a unique label.
-  def unique_label
+  def unique_label(suffix=nil)
     @num_labels += 1
-    "L#{sprintf "%06d", @num_labels}"
+    if suffix
+      @num_labels_with_suffix[suffix] += 1
+      suffix = "_#{suffix}_#{@num_labels_with_suffix[suffix]}"
+    end
+    "L#{sprintf "%06d", @num_labels}#{suffix}"
   end
 
 
@@ -402,5 +429,13 @@ class Compiler
 
   def x86_jz(label)
     emit("jz #{label}")
+  end
+
+  def x86_jnz(label)
+    emit("jnz #{label}")
+  end
+
+  def x86_jmp(label)
+    emit("jmp #{label}")
   end
 end
