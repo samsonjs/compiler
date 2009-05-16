@@ -162,16 +162,15 @@ class Compiler
     match('i')
     condition
     else_label = unique_label(:else)
-    end_label = unique_label(:end)
+    end_label = else_label      # only generated if else clause present
     x86_jz(else_label)
     block
     if @look == 'l'
       match('l')
+      end_label = unique_label(:end) # now we need the 2nd label
       x86_jmp(end_label)
       emit_label(else_label)
       block
-    else
-      emit_label(else_label)    # we end up with an extra label, oh well
     end
     match('e')
     emit_label(end_label)
