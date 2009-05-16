@@ -10,6 +10,7 @@ def parse(input)
 rescue ParseError => e
   error("[error] #{e.message}")
   error("Aborting!")
+  error(e.caller)
   exit(1)
 end
 

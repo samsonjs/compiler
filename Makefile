@@ -5,3 +5,8 @@ build:
 # $? indicates success as per unix convention
 	./test
 
+clean:
+	@rm -f test.o
+	@rm -f test
+	@rm -f test.asm
+

@@ -6,7 +6,12 @@
 # sjs
 # may 2009
 
-class ParseError < StandardError; end 
+class ParseError < StandardError
+  attr_reader :caller
+  def initialize(caller)
+    @caller = caller
+  end
+end
 
 class Compiler
   attr_reader :data, :bss, :code
@@ -17,120 +22,19 @@ class Compiler
     @data = ''                   # data section
     @bss = ''                    # bss section
     @code = ''                   # code section
-    @vars = {}
+    @vars = {}                   # symbol table
+    @num_labels = 0              # used to generate unique labels
+    @keywords = %w[i e]          # reserved words (... constant?)
 
     # seed the lexer
     get_char
-    skip_whitespace
   end
 
   def parse
-    statement until eof?
+    block
+    expected('end of file'.to_sym) unless eof?
     [@data, @bss, @code]
   end
-
-  # Read the next character from the input stream.
-  def get_char
-    @look = if @input.eof?
-              nil
-            else
-              @input.readbyte.chr 
-            end
-  end
-
-  # Report error and halt
-  def abort(msg)
-    raise ParseError, msg
-  end
-
-  # Report what was expected
-  def expected(what)
-    if eof?
-      raise ParseError, "Premature end of file, expected: #{what}."
-    else
-      raise ParseError, "Expected: #{what}, got: #{@look} (##{@look[0]})."
-    end
-  end
-  
-
-
-  # Recognize an alphabetical character.
-  def alpha?(char)
-    ('A'..'Z') === char.upcase
-  end
-
-  # Recognize a decimal digit.
-  def digit?(char)
-    ('0'..'9') === char
-  end
-
-  # Recognize an alphanumeric character.
-  def alnum?(char)
-    alpha?(char) || digit?(char)
-  end
-
-  def whitespace?(char)
-    char == ' ' || char == '\t'
-  end
-
-
-  # Match a specific input character.
-  def match(char)
-    expected("'#{char}'") unless @look == char
-    get_char
-    skip_whitespace
-  end
-
-  # Parse zero or more consecutive characters for which the test is
-  # true.
-  def many(test)
-    token = ''
-    while test.call(@look)
-      token << @look
-      get_char
-    end
-    skip_whitespace
-    token
-  end
-
-  # Get an identifier.
-  def get_name
-    expected('identifier') unless alpha?(@look)
-    many(method(:alnum?))
-  end
-
-  # Get a number.
-  def get_num
-    expected('integer') unless digit?(@look)
-    many(method(:digit?))
-  end
-
-  # Skip all leading whitespace.
-  def skip_whitespace
-    get_char while whitespace?(@look)
-  end
-
-
-  # Define a constant in the .data section.
-  def equ(name, value)
-    @data << "#{name}\tequ  #{value}"
-  end
-
-  # Define a variable with the given name and size (in dwords).
-  def var(name, dwords=1)
-    unless @vars[name]
-      @bss << "#{name}: resd #{dwords}\n"
-      @vars[name] = name
-    # else
-    #   raise ParseError, "identifier #{name} redefined"
-    end
-  end
-
-  # Emit a line of code wrapped between a tab and a newline.
-  def emit(s)
-    @code << "\t#{s}\n"
-  end
-
 
 
   # Parse and translate an identifier or function call.
@@ -159,7 +63,7 @@ class Compiler
     elsif digit?(@look)
       x86_mov(:eax, get_num)
     else
-      expected("a number, identifier, or an expression wrapped in parens")
+      expected('integer, identifier, or parenthesized expression'.to_sym)
     end
   end
 
@@ -221,21 +125,40 @@ class Compiler
     x86_mov("dword [#{name}]", :eax)
   end
 
-  # Parse one or more newlines.
-  def newline
-    if @look == "\n" || @look == "\r"
-      get_char while @look == "\n" || @look == "\r"
+  # Parse an assignment expression followed by a newline.
+  def statement
+    case @look
+    when 'i'
+      if_stmt
     else
-      expected('newline')
+      assignment
+      newline
     end
   end
 
-  # Parse an assignment expression followed by a newline.
-  def statement
-    assignment
-    newline
+  # Parse a code block.
+  def block
+    until @look == 'e' || eof?
+      statement
+      skip_any_whitespace
+    end
+  end
+  
+  # Parse an if statement.
+  def if_stmt
+    match('i')
+    label = unique_label
+    condition
+    x86_jz(label)
+    block
+    match('e')
+    emit_label(label)
   end
 
+  # Dummy condition function.  Will handle boolean expressions later.
+  def condition
+    emit('<condition>')
+  end
 
   # Parse an addition operator and the 2nd term (b).  The result is
   # left in eax.  The 1st term (a) is expected on the stack.
@@ -279,9 +202,10 @@ class Compiler
 
 
 
-#######
-private
-#######
+############
+# internal #
+############
+
 
   def eof?
     @input.eof? && @look.nil?
@@ -293,6 +217,144 @@ private
 
   def mulop?
     @look == '*' || @look == '/'
+  end
+
+
+  # Read the next character from the input stream.
+  def get_char
+    @look = if @input.eof?
+              nil
+            else
+              @input.readbyte.chr 
+            end
+  end
+
+  # Report error and halt
+  def abort(msg)
+    raise ParseError, msg
+  end
+
+  # Report what was expected
+  def expected(what, options={})
+    got = options.has_key?(:got) ? options[:got] : @look
+    got, what = *[got, what].map {|x| x.is_a?(Symbol) ? x : "'#{x}'" }
+    if eof?
+      raise ParseError.new(caller), "Premature end of file, expected: #{what}."
+    else
+      raise ParseError.new(caller), "Expected #{what} but got #{got}. (\"...#{@input.readline rescue '(EOF)'}...\")"
+    end
+  end
+  
+
+
+  # Recognize an alphabetical character.
+  def alpha?(char)
+    ('A'..'Z') === char.upcase
+  end
+
+  # Recognize a decimal digit.
+  def digit?(char)
+    ('0'..'9') === char
+  end
+
+  # Recognize an alphanumeric character.
+  def alnum?(char)
+    alpha?(char) || digit?(char)
+  end
+
+  def whitespace?(char)
+    char == ' ' || char == "\t"
+  end
+
+  def any_whitespace?(char)
+    char == ' ' || char == "\t" || char == "\n" || char == "\r"
+  end
+
+  # Parse one or more newlines.
+  def newline
+    if @look == "\n" || @look == "\r"
+      get_char while @look == "\n" || @look == "\r"
+    else
+      expected(:newline)
+    end
+  end
+
+  # Match a specific input character.
+  def match(char)
+    expected(char) unless @look == char
+    get_char
+    skip_whitespace
+  end
+
+  # Parse zero or more consecutive characters for which the test is
+  # true.
+  def many(test)
+    token = ''
+    while test.call(@look)
+      token << @look
+      get_char
+    end
+    skip_whitespace
+    token
+  end
+
+
+  # Get an identifier.
+  def get_name
+    expected(:identifier) unless alpha?(@look)
+    name = many(method(:alnum?))
+    if @keywords.include?(name)
+      expected(:identifier, :got => :keyword)
+    end
+    name
+  end
+
+  # Get a number.
+  def get_num
+    expected(:integer) unless digit?(@look)
+    many(method(:digit?))
+  end
+
+  # Skip leading whitespace.
+  def skip_whitespace
+    get_char while whitespace?(@look)
+  end
+
+  # Skip leading whitespace including newlines.
+  def skip_any_whitespace
+    get_char while any_whitespace?(@look)
+  end
+
+
+  # Define a constant in the .data section.
+  def equ(name, value)
+    @data << "#{name}\tequ  #{value}"
+  end
+
+  # Define a variable with the given name and size (in dwords).
+  def var(name, dwords=1)
+    unless @vars[name]
+      @bss << "#{name}: resd #{dwords}\n"
+      @vars[name] = name
+    # else
+    #   raise ParseError, "identifier #{name} redefined"
+    end
+  end
+
+  # Emit a line of code wrapped between a tab and a newline.
+  def emit(code, options={})
+    tab = options.has_key?(:tab) ? options[:tab] : "\t"
+    @code << "#{tab}#{code}\n"
+  end
+
+  def emit_label(name=unique_label)
+    emit("#{name}:", :tab => nil)
+  end
+
+  # Generate a unique label.
+  def unique_label
+    @num_labels += 1
+    "L#{sprintf "%06d", @num_labels}"
   end
 
 
@@ -336,5 +398,9 @@ private
 
   def x86_xor(op1, op2)
     emit("xor #{op1}, #{op2}")
+  end
+
+  def x86_jz(label)
+    emit("jz #{label}")
   end
 end
