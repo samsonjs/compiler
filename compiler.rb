@@ -7,9 +7,10 @@
 # may 2009
 
 class ParseError < StandardError
-  attr_reader :caller
-  def initialize(caller)
+  attr_reader :caller, :context
+  def initialize(caller, context=nil)
     @caller = caller
+    @context = context
   end
 end
 
@@ -25,8 +26,13 @@ class Compiler
     @vars = {}                   # symbol table
     @num_labels = 0              # used to generate unique labels
     @num_labels_with_suffix = Hash.new(0)
-    @keywords = %w[i l e]        # reserved words (... constant?)
     @num_conditions = 0
+    @break_stack = []            # for breaking out of loops
+
+    # reserved words (... constant?)
+    #
+    # if, else, end, while, until, repeat, break
+    @keywords = %w[i l e w u r b]
 
     # seed the lexer
     get_char
@@ -34,7 +40,7 @@ class Compiler
 
   def parse
     block
-    expected('end of file'.to_sym) unless eof?
+    expected(:'end of file') unless eof?
     [@data, @bss, @code]
   end
 
@@ -65,7 +71,7 @@ class Compiler
     elsif digit?(@look)
       x86_mov(:eax, get_num)
     else
-      expected('integer, identifier, or parenthesized expression'.to_sym)
+      expected(:'integer, identifier, or parenthesized expression')
     end
   end
 
@@ -127,11 +133,19 @@ class Compiler
     x86_mov("dword [#{name}]", :eax)
   end
 
-  # Parse an assignment expression followed by a newline.
+  # Parse a statement.
   def statement
     case @look
     when 'i'
       if_else_stmt
+    when 'w'
+      while_stmt
+    when 'u'
+      until_stmt
+    when 'r'
+      repeat_stmt
+    when 'b'
+      break_stmt
     else
       assignment
       newline
@@ -139,35 +153,28 @@ class Compiler
   end
 
   # Parse a code block.
-  def block
+  def block(label=nil)
+    @break_stack.push(label) if label
     until @look == 'l' || @look == 'e' || eof?
       statement
       skip_any_whitespace
     end
+    @break_stack.pop if label
   end
   
-  # Parse an if statement.
-  def if_stmt
-    match('i')
-    condition
-    label = unique_label(:end)
-    x86_jz(label)
-    block
-    match('e')
-    emit_label(label)
-  end
-
   # Parse an if-else statement.
   def if_else_stmt
     match('i')
     condition
-    else_label = unique_label(:else)
+    skip_any_whitespace
+    else_label = unique_label(:end_or_else)
     end_label = else_label      # only generated if else clause present
     x86_jz(else_label)
     block
     if @look == 'l'
       match('l')
-      end_label = unique_label(:end) # now we need the 2nd label
+      skip_any_whitespace
+      end_label = unique_label(:endif) # now we need the 2nd label
       x86_jmp(end_label)
       emit_label(else_label)
       block
@@ -176,10 +183,62 @@ class Compiler
     emit_label(end_label)
   end
 
-  # Dummy condition function.  Will handle boolean expressions later.
+  def while_stmt
+    match('w')
+    while_label = unique_label(:while)
+    end_label = unique_label(:endwhile)
+    emit_label(while_label)
+    condition
+    skip_any_whitespace
+    x86_jz(end_label)
+    block(end_label)
+    match('e')
+    x86_jmp(while_label)
+    emit_label(end_label)
+  end
+
+  def until_stmt
+    match('u')
+    until_label = unique_label(:until)
+    end_label = unique_label(:enduntil)
+    emit_label(until_label)
+    condition
+    skip_any_whitespace
+    x86_jnz(end_label)
+    block(end_label)
+    match('e')
+    x86_jmp(until_label)
+    emit_label(end_label)
+  end
+
+  def repeat_stmt
+    match('r')
+    skip_any_whitespace         # no condition, slurp whitespace
+    repeat_label = unique_label(:repeat)
+    end_label = unique_label(:endrepeat)
+    emit_label(repeat_label)
+    block(end_label)
+    match('e')
+    x86_jmp(repeat_label)
+    emit_label(end_label)
+  end
+
+  def break_stmt
+    match('b')
+    if @break_stack.empty?
+      expected(:'break to be somewhere useful',
+               :got => :'a break without a loop')
+    end
+    x86_jmp(@break_stack.last)
+  end
+
+  # Evaluates any expression for now.  There are no boolean operators.
   def condition
-    @num_conditions += 1
-    emit("<condition ##{@num_conditions}>")
+    # @num_conditions += 1
+    # emit("<condition ##{@num_conditions}>")
+    expression
+    x86_cmp(:eax, 0)            # 0 is false, anything else is true
+    skip_whitespace
   end
 
   # Parse an addition operator and the 2nd term (b).  The result is
@@ -263,7 +322,8 @@ class Compiler
     if eof?
       raise ParseError.new(caller), "Premature end of file, expected: #{what}."
     else
-      raise ParseError.new(caller), "Expected #{what} but got #{got}. (\"...#{@input.readline rescue '(EOF)'}...\")"
+      context = (@input.readline rescue '(EOF)').gsub("\n", "\\n")
+      raise ParseError.new(caller, context), "Expected #{what} but got #{got}."
     end
   end
   
@@ -312,7 +372,7 @@ class Compiler
   # true.
   def many(test)
     token = ''
-    while test.call(@look)
+    while test[@look]
       token << @look
       get_char
     end
@@ -436,5 +496,9 @@ class Compiler
 
   def x86_jmp(label)
     emit("jmp #{label}")
+  end
+
+  def x86_cmp(a, b)
+    emit("cmp #{a}, #{b}")
   end
 end
