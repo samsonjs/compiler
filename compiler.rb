@@ -50,6 +50,7 @@ class Compiler
     if @look == '('
       # function call
       match('(')
+      # TODO arg list
       match(')')
       x86_call(name)
     else
@@ -65,18 +66,32 @@ class Compiler
       expression
       match(')')
     elsif alpha?(@look)
-      identifier
+      identifier                # or call
     elsif digit?(@look)
       x86_mov(:eax, get_num)
     else
-      expected(:'integer, identifier, or parenthesized expression')
+      expected(:'integer, identifier, function call, or parenthesized expression')
     end
+  end
+
+  # Parse a signed factor.
+  def signed_factor
+    unary_op = if @look == '-'
+                 match('-')
+                 :neg
+               elsif @look == '+'
+                 match('+')
+                 :pos
+               end
+    factor
+    x86_neg(:eax) if unary_op == :neg
   end
 
   # Parse and translate a single term (factor or mulop).  Result is in
   # eax.
   def term
-    factor                      # Result in eax.
+    signed_factor                      # Result in eax.
+
     while mulop?
       # Stash the 1st factor on the stack.  This is expected by
       # multiply & divide.  Because they leave their results in eax
@@ -97,13 +112,7 @@ class Compiler
   # Parse and translate a general expression of terms.  Result is
   # in eax.
   def expression
-    if addop?
-      # Clear eax simulating a zero before unary plus and minus
-      # operations.
-      x86_xor(:eax, :eax)
-    else
-      term                      # Result is in eax.
-    end
+    term                      # Result is in eax.
 
     while addop?
       # Stash the 1st term on the stack.  This is expected by add &
@@ -121,6 +130,47 @@ class Compiler
       x86_add(:esp, 4)        # Remove 1st term (a) from the stack.
     end
   end
+
+  # Parse an addition operator and the 2nd term (b).  The result is
+  # left in eax.  The 1st term (a) is expected on the stack.
+  def add
+    match('+')
+    term                        # Result is in eax.
+    x86_add(:eax, '[esp]')         # Add a to b.
+  end
+
+  # Parse a subtraction operator and the 2nd term (b).  The result is
+  # left in eax.  The 1st term (a) is expected on the stack.
+  def subtract
+    match('-')
+    term                      # Result, b, is in eax.
+    x86_neg(:eax)             # Fake the subtraction.  a - b == a + -b
+    x86_add(:eax, '[esp]')    # Add a and -b.
+  end
+
+  # Parse an addition operator and the 2nd term (b).  The result is
+  # left in eax.  The 1st term (a) is expected on the stack.
+  def multiply
+    match('*')
+    signed_factor               # Result is in eax.
+    x86_imul('dword [esp]')     # Multiply a by b.
+  end
+
+  # Parse a division operator and the divisor (b).  The result is
+  # left in eax.  The dividend (a) is expected on the stack.
+  def divide
+    match('/')
+    signed_factor               # Result is in eax.
+    x86_xchg(:eax, '[esp]')     # Swap the divisor and dividend into
+                                # the correct places.
+
+    # idiv uses edx:eax as the dividend so we need to ensure that edx
+    # is correctly sign-extended w.r.t. eax.
+    emit('cdq')       # Sign-extend eax into edx (Convert Double to
+                      # Quad).
+    x86_idiv('dword [esp]')     # Divide a (eax) by b ([esp]).
+  end
+
 
   # Parse an assignment statement.  Value is in eax.
   def assignment
@@ -288,46 +338,6 @@ class Compiler
     expression
     x86_cmp(:eax, 0)            # 0 is false, anything else is true
     skip_whitespace
-  end
-
-  # Parse an addition operator and the 2nd term (b).  The result is
-  # left in eax.  The 1st term (a) is expected on the stack.
-  def add
-    match('+')
-    term                        # Result is in eax.
-    x86_add(:eax, '[esp]')         # Add a to b.
-  end
-
-  # Parse a subtraction operator and the 2nd term (b).  The result is
-  # left in eax.  The 1st term (a) is expected on the stack.
-  def subtract
-    match('-')
-    term                      # Result, b, is in eax.
-    x86_neg(:eax)             # Fake the subtraction.  a - b == a + -b
-    x86_add(:eax, '[esp]')    # Add a and -b.
-  end
-
-  # Parse an addition operator and the 2nd term (b).  The result is
-  # left in eax.  The 1st term (a) is expected on the stack.
-  def multiply
-    match('*')
-    factor                      # Result is in eax.
-    x86_imul('dword [esp]')     # Multiply a by b.
-  end
-
-  # Parse a division operator and the divisor (b).  The result is
-  # left in eax.  The dividend (a) is expected on the stack.
-  def divide
-    match('/')
-    factor                      # Result is in eax.
-    x86_xchg(:eax, '[esp]')     # Swap the divisor and dividend into
-                                # the correct places.
-
-    # idiv uses edx:eax as the dividend so we need to ensure that edx
-    # is correctly sign-extended w.r.t. eax.
-    emit('cdq')       # Sign-extend eax into edx (Convert Double to
-                      # Quad).
-    x86_idiv('dword [esp]')     # Divide a (eax) by b ([esp]).
   end
 
 
