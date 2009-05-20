@@ -144,6 +144,8 @@ class Compiler
       until_stmt
     when 'r'
       repeat_stmt
+    when 'f'
+      for_stmt
     when 'b'
       break_stmt
     else
@@ -221,6 +223,38 @@ class Compiler
     match('e')
     x86_jmp(repeat_label)
     emit_label(end_label)
+  end
+
+  # s = 0
+  # f x = 1 >> 5
+  #   s = s + x
+  # e
+  def for_stmt
+    match('f')
+    start_label = unique_label(:for)
+    end_label = unique_label(:endfor)
+    counter = "[#{get_name}]"
+    match('=')
+    expression                  # initial value
+    x86_sub(:eax, 1)            # pre-decrement because of the
+                                # following pre-increment
+    x86_mov(counter, :eax)      # stash the counter in memory
+    match('>'); match('>')
+    expression                  # final value
+    skip_any_whitespace
+    x86_push(:eax)              # stash final value on stack
+    final = '[esp]'
+    emit_label(start_label)
+    x86_mov(:ecx, counter)      # get the counter
+    x86_add(:ecx, 1)            # increment
+    x86_mov(counter, :ecx)      # store the counter
+    x86_cmp(final, :ecx)        # check if we're done
+    x86_jz(end_label)           # if so jump to the end
+    block(end_label)            # otherwise execute the block
+    match('e')
+    x86_jmp(start_label)        # lather, rinse, repeat
+    emit_label(end_label)
+    x86_add(:esp, 4)            # clean up the stack
   end
 
   def break_stmt
@@ -464,6 +498,10 @@ class Compiler
 
   def x86_idiv(op)
     emit("idiv #{op}")
+  end
+
+  def x86_inc(op)
+    emit("inc #{op}")
   end
 
   def x86_push(reg)

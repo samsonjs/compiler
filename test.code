@@ -4,11 +4,11 @@ somethinglong=65536
 x=5*(3-5)
 c=a-1
 d=-1
-f=x*2+2
-g=f-27/9
-h=g-8/2
-j=h-4*(5+5+5)
-k=h+85
+g=x*2+2
+h=g-27/9
+j=h-8/2
+k=j-4*(5+5+5)
+m=k+85
 
 i 1
   d=3
@@ -39,10 +39,15 @@ u 1
 e
 
 r
-  cc = cc * 2
+  cc = c * 2
   i 1
     b
   e
+e
+
+s=0
+f x = 1 >> 5
+  s = s + x
 e
 
 xitcode=a-a
