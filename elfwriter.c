@@ -277,7 +277,7 @@ main(int argc, const char *argv[])
         }
         fclose(fd);
         
-        printf("Writing x86 ELF binary to %s...\n", argv[1]);
+        printf("Writing x86 ELF binary to %s...\n", argv[3]);
         result = elf_write(argv[3], code, code_size);
         if (result < 0) {
                 printf("[error] elf_write failed.\n");

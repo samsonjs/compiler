@@ -1,6 +1,11 @@
 require 'compiler'
 require 'stringio'
 
+X86_exit = [0x89, 0xc3,         # mov ebx, eax (exit code)
+            0xb8, 1, 0, 0, 0,   # mov eax, 1
+            0xcd, 0x80          # int 0x80
+           ].pack('c*')
+
 def error(msg) STDERR.puts(msg) end
 
 def parse(input)
@@ -33,7 +38,10 @@ def main(arg)
   template = File.read("template.asm")
   asm = interpolate(template, :data => data, :bss => bss, :code => code)
   File.open("test.asm", "w") { |f| f.puts(asm) }
-  File.open("test.bin", "wb") { |f| f.write(binary) }
+  File.open("test.bin", "wb") { |f|
+    f.write(binary)
+    f.write(X86_exit)
+  }
 end
 
 main(ARGV[0].to_s)
