@@ -47,7 +47,7 @@ elf_write(const char *filename, uint8_t *code, size_t code_size)
         Elf_Scn *scn;
         Elf_Data *data;
         Elf32_Ehdr *ehdr;
-        Elf32_Phdr *phdr, *load;
+        Elf32_Phdr *phdr;
         Elf32_Shdr *shdr;
 
         if (elf_version(EV_CURRENT) == EV_NONE) {
@@ -89,12 +89,12 @@ elf_write(const char *filename, uint8_t *code, size_t code_size)
         /*******************
          * Program Headers *
          *******************/
-        
-        if ((phdr = elf32_newphdr(elf, 2)) == NULL) {
+
+        /* 3 segments => 3 program headers (text, data, bss) */
+        if ((phdr = elf32_newphdr(elf, 3)) == NULL) {
                 printf("elf32_newphdr failed!\n");
                 return -5;
         }
-        load = phdr+1;
 
 
         /*****************
@@ -202,17 +202,39 @@ elf_write(const char *filename, uint8_t *code, size_t code_size)
                 return -12;
         }
 
-        phdr->p_vaddr = phdr->p_paddr = 0x8048000 + ehdr->e_phoff;
-        phdr->p_type = PT_PHDR;
-        phdr->p_offset = ehdr->e_phoff;
-        phdr->p_filesz = elf32_fsize(ELF_T_PHDR, 1, EV_CURRENT);
+        /* phdr->p_vaddr = phdr->p_paddr = 0x8048000 + ehdr->e_phoff; */
+        /* phdr->p_type = PT_PHDR; */
+        /* phdr->p_offset = ehdr->e_phoff; */
+        /* phdr->p_filesz = elf32_fsize(ELF_T_PHDR, 1, EV_CURRENT); */
 
-        load->p_vaddr = phdr->p_paddr = 0x8048000;
-        load->p_type = PT_LOAD;
-        load->p_offset = 0;
-        load->p_filesz = elf32_fsize(ELF_T_PHDR, 1, EV_CURRENT);
-        load->p_flags = PF_R | PF_X;
-        load->p_align = 0x1000;
+        /* text segment */
+        phdr->p_vaddr = text_addr;
+        phdr->p_type = PT_LOAD;
+        phdr->p_offset = header_size;
+        phdr->p_filesz = text_size;
+        phdr->p_memsz = text_size;
+        phdr->p_flags = PF_R | PF_X;
+        phdr->p_align = 0x1000;
+
+        /* data segment */
+        phdr++;
+        phdr->p_vaddr = data_addr;
+        phdr->p_type = PT_LOAD;
+        phdr->p_offset = header_size + text_size;
+        phdr->p_filesz = data_size;
+        phdr->p_memsz = data_size + 0x1024; /* XXX unsure why the abi specifies + 0x1024 */
+        phdr->p_flags = PF_R | PF_W | PF_X;
+        phdr->p_align = 0x1000;
+
+        /* bss segment */
+        phdr++;
+        phdr->p_vaddr = bss_addr;
+        phdr->p_type = PT_LOAD;
+        phdr->p_offset = header_size + text_size + data_size;
+        phdr->p_filesz = bss_size;
+        phdr->p_memsz = bss_size;
+        phdr->p_flags = PF_R | PF_W;
+        phdr->p_align = 0x1000;
 
         elf_flagphdr(elf, ELF_C_SET, ELF_F_DIRTY);
         
