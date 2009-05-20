@@ -3,28 +3,28 @@ aa=10
 somethinglong=65536
 x=5*(3-5)
 c=a-1
-d=-1
-g=x*2+2
-h=g-27/9
-j=h-8/2
-k=j-4*(5+5+5)
-m=k+85
+g=-1
+h=x*2+2
+j=h-27/9
+k=j-8/2
+m=k-4*(5+5+5)
+n=m+85
 
 i 1
-  d=3
+  x=3
   i 1 c=4
   e
 e
-i1d=3
+i1x=3
 i1c=4
 ee
 
 i 1
-  d=3
+  x=3
   i 1 c=4
   e
 l
- d=2
+ x=2
 e
 
 w 0
@@ -48,6 +48,10 @@ e
 s=0
 f x = 1 >> 5
   s = s + x
+e
+
+d 10
+  a = a * a
 e
 
 xitcode=a-a
