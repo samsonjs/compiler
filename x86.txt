@@ -1,0 +1,11 @@
+mov (0x66) {
+  reg32, reg32 (0x89) {
+                      op2 - src
+    
+                 eax  ecx  edx  ebx
+    op1     eax  c0   c8   d0   d8
+    dest    ecx  c1   c9   d1   d9
+            edx  c2   ca   d2   da
+            ebx  c3   cb   d3   db
+  }
+}
