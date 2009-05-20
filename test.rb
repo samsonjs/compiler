@@ -5,7 +5,7 @@ def error(msg) STDERR.puts(msg) end
 
 def parse(input)
   compiler = Compiler.new(input)
-  compiler.parse                # tuple of [data, bss, code]
+  compiler.parse                # tuple of [data, bss, code, binary]
 
 rescue ParseError => e
   error("[error] #{e.message}")
@@ -29,10 +29,11 @@ def main(arg)
             # StringIO.new("5*(3-5)*2+2-9/3-8/2-4*(5+5+5)\n")
             StringIO.new("abc=999\nabc-888\n")
           end
-  data, bss, code = *parse(input)
+  data, bss, code, binary = *parse(input)
   template = File.read("template.asm")
   asm = interpolate(template, :data => data, :bss => bss, :code => code)
   File.open("test.asm", "w") { |f| f.puts(asm) }
+  File.open("test.bin", "wb") { |f| f.write(binary) }
 end
 
 main(ARGV[0].to_s)

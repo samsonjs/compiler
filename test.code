@@ -39,7 +39,7 @@ u 1
 e
 
 r
-  cc = cc * 2
+  cc = c * 2
   i 1
     b
   e
