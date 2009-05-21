@@ -20,7 +20,8 @@ build: test.rb test.code
 	./test
 
 clean:
-	@rm -f test.o
-	@rm -f test
-	@rm -f test.asm
+	@rm -f test*.o
+	@rm -f test test_lt test_print
+	@rm -f test*.asm
+	@rm -f *.o
 

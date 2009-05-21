@@ -1,3 +1,5 @@
 test
 *.o
-test.asm
+test*.asm
+test_lt
+test_print
