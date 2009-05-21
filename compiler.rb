@@ -29,8 +29,9 @@ class Compiler
 
     # reserved words (... constant?)
     #
-    # if, else, end, while, until, repeat, for, do, break
-    @keywords = %w[i l e w u r f d b]
+    # if, else, end, while, until, repeat, do, for, break, true, false, print,
+    # not, and, or, add, subtract, multiply, divide, xor, bool tests
+    @keywords = %w[i l e w u r f d b t f p ! & | + - * / ^ = < > #]
 
     # seed the lexer
     get_char
@@ -63,12 +64,12 @@ class Compiler
   def factor
     if @look == '('
       match('(')
-      expression
+      boolean_expression
       match(')')
     elsif alpha?(@look)
       identifier                # or call
     elsif digit?(@look)
-      x86_mov(:eax, get_num)
+      x86_mov(:eax, get_number)
     else
       expected(:'integer, identifier, function call, or parenthesized expression')
     end
@@ -76,15 +77,10 @@ class Compiler
 
   # Parse a signed factor.
   def signed_factor
-    unary_op = if @look == '-'
-                 match('-')
-                 :neg
-               elsif @look == '+'
-                 match('+')
-                 :pos
-               end
+    sign = @look
+    match(sign) if sign == '-' || sign == '+'
     factor
-    x86_neg(:eax) if unary_op == :neg
+    x86_neg(:eax) if sign == '-'
   end
 
   # Parse and translate a single term (factor or mulop).  Result is in
@@ -172,12 +168,162 @@ class Compiler
   end
 
 
+  #######################
+  # boolean expressions #
+  #######################
+
+  def boolean_expression
+    boolean_term
+
+    while orop?
+      x86_push(:eax)
+      case @look
+      when '|': or_expr
+      when '^': xor_expr
+      end
+      x86_add(:esp, 4)
+    end
+  end
+
+  def or_expr
+    match('|')
+    boolean_term
+    x86_or(:eax, '[esp]')
+  end
+
+  def xor_expr
+    match('^')
+    boolean_term
+    x86_xor(:eax, '[esp]')
+  end
+
+  def boolean_term
+    not_factor
+
+    while andop?
+      x86_push(:eax)
+      # and_expr
+      match('&')
+      not_factor
+      x86_and(:eax, '[esp]')
+      x86_add(:esp, 4)
+    end
+  end
+
+  def boolean_factor
+    if boolean?(@look)
+      if get_boolean
+        x86_mov(:eax, -1)
+      else
+        x86_xor(:eax, :eax)
+      end
+    else
+      relation
+    end
+  end
+
+  def not_factor
+    if @look == '!'
+      match('!')
+      boolean_factor
+      make_boolean(:eax)        # ensure it is -1 or 0...
+      x86_not(:eax)             # so that not is also boolean not
+    else
+      boolean_factor
+    end
+  end
+
+  # Convert any identifier to a boolean (-1 or 0).  This is
+  # semantically equivalent to !!reg in C or Ruby.
+  def make_boolean(reg=:eax)
+    end_label = unique_label(:endmakebool)
+    x86_cmp(reg, 0)             # if false do nothing
+    x86_jz(end_label)
+    x86_mov(reg, -1)            # truthy, make it true
+    emit_label(end_label)
+  end
+
+  def get_boolean
+    expected(:boolean) unless boolean?(@look)
+    value = @look == 't'
+    get_char
+    value
+  end
+
+  def relation
+    expression
+    if relop?
+      x86_push(:eax)
+      case @look
+      when '=': eq_relation
+      when '#': neq_relation
+      when '>': gt_relation
+      when '<': lt_relation
+      # TODO ge, le (needs real tokens)
+      end
+    end
+  end
+
+  def eq_relation
+    match('=')
+    expression
+    x86_pop(:ebx)
+    x86_sub(:eax, :ebx)
+    make_boolean
+    x86_not(:eax)
+  end
+
+  def neq_relation
+    match('#')
+    expression
+    x86_pop(:ebx)
+    x86_sub(:eax, :ebx)
+    make_boolean
+  end
+
+  def gt_relation
+    match('>')
+    gt_label = unique_label(:gt)
+    end_label = unique_label(:endgt)
+    expression
+    x86_pop(:ebx)
+    x86_cmp(:eax, :ebx)         # b - a < 0 if a > b
+    x86_jl(gt_label)
+    x86_xor(:eax, :eax)
+    x86_jmp(end_label)
+    emit_label(gt_label)
+    x86_xor(:eax, :eax)
+    x86_not(:eax)
+    emit_label(end_label)
+  end
+
+  def lt_relation
+    match('<')
+    lt_label = unique_label(:lt)
+    end_label = unique_label(:endlt)
+    expression
+    x86_pop(:ebx)
+    x86_cmp(:ebx, :eax)         # a - b < 0 if a < b
+    x86_jl(lt_label)
+    x86_xor(:eax, :eax)
+    x86_jmp(end_label)
+    emit_label(lt_label)
+    x86_xor(:eax, :eax)
+    x86_not(:eax)
+    emit_label(end_label)
+  end
+
+
+  ######################################
+  # statements and controls structures #
+  ######################################
+
   # Parse an assignment statement.  Value is in eax.
   def assignment
     name = get_name
     match('=')
-    expression
-    var(name)
+    boolean_expression
+    defvar(name) unless var?(name)
     x86_mov("dword [#{name}]", :eax)
   end
 
@@ -199,6 +345,9 @@ class Compiler
         do_stmt
       when 'b'
         break_stmt(label)
+      when 'p'
+        print_stmt
+        newline
       else
         assignment
         newline
@@ -210,10 +359,10 @@ class Compiler
   # Parse an if-else statement.
   def if_else_stmt(label)
     match('i')
-    condition
-    skip_any_whitespace
     else_label = unique_label(:end_or_else)
     end_label = else_label      # only generated if else clause present
+    condition
+    skip_any_whitespace
     x86_jz(else_label)
     block(label)
     if @look == 'l'
@@ -278,12 +427,12 @@ class Compiler
     end_label = unique_label(:endfor)
     counter = "[#{get_name}]"
     match('=')
-    expression                  # initial value
+    boolean_expression          # initial value
     x86_sub(:eax, 1)            # pre-decrement because of the
                                 # following pre-increment
     x86_mov(counter, :eax)      # stash the counter in memory
-    match('>'); match('>')
-    expression                  # final value
+    match('.'); match('.')
+    boolean_expression          # final value
     skip_any_whitespace
     x86_push(:eax)              # stash final value on stack
     final = '[esp]'
@@ -307,7 +456,7 @@ class Compiler
     match('d')
     start_label = unique_label(:do)
     end_label = unique_label(:enddo)
-    expression
+    boolean_expression
     skip_any_whitespace
     x86_mov(:ecx, :eax)
     x86_push(:ecx)
@@ -335,11 +484,54 @@ class Compiler
 
   # Evaluates any expression for now.  There are no boolean operators.
   def condition
-    expression
-    x86_cmp(:eax, 0)            # 0 is false, anything else is true
+    boolean_expression
     skip_whitespace
+    x86_cmp(:eax, 0)            # 0 is false, anything else is true
   end
 
+  def print_stmt
+    match('p')
+    # define a lookup table of digits
+    unless var?('DIGITS')
+      defvar('DIGITS', 4)
+      x86_mov('dword [DIGITS]',    0x33323130)
+      x86_mov('dword [DIGITS+4]',  0x37363534)
+      x86_mov('dword [DIGITS+8]',  0x62613938)
+      x86_mov('dword [DIGITS+12]', 0x66656463)
+    end
+    # 3 dwords == 12 chars
+    defvar('HEX', 3) unless var?('HEX')
+    # TODO check sign and prepend '-' if negative
+    x86_mov('word [HEX]', 0x7830) # "0x" == [48, 120]
+    x86_mov('word [HEX+10]', 0xa)  # newline + null terminator
+    boolean_expression
+    # convert eax to a hex string
+    x86_lea(:esi, '[DIGITS]')
+    x86_lea(:edi, '[HEX+9]')
+    # build the string backwards (right to left), byte by byte
+    x86_mov(:ecx, 4)
+    emit_label(loop_label=unique_label)
+    # low nybble of nth byte
+    x86_movzx(:ebx, :al)
+    x86_and(:bl, 0x0f)        # isolate low nybble
+    x86_movzx(:edx, 'byte [esi+ebx]')
+    x86_mov('byte [edi]', :dl)
+    x86_dec(:edi)
+    # high nybble of nth byte
+    x86_movzx(:ebx, :al)
+    x86_and(:bl, 0xf0)        # isolate high nybble
+    x86_shr(:bl, 4)
+    x86_mov(:dl, 'byte [esi+ebx]')
+    x86_mov('byte [edi]', :dl)
+    x86_dec(:edi)
+    x86_shr(:eax, 8)
+    x86_loop(loop_label)
+    x86_mov(:eax, 4)            # SYS_write
+    x86_mov(:ebx, 1)            # STDOUT
+    x86_lea(:ecx, '[HEX]')
+    x86_mov(:edx, 11)           # excluding term, max # of chars to print
+    x86_int(0x80)
+  end
 
 
 ############
@@ -359,6 +551,17 @@ class Compiler
     @look == '*' || @look == '/'
   end
 
+  def relop?
+    @look == '=' || @look == '#' || @look == '<' || @look == '>'
+  end
+
+  def orop?
+    @look == '|' || @look == '^'
+  end
+
+  def andop?
+    @look == '&'
+  end
 
   # Read the next character from the input stream.
   def get_char
@@ -401,6 +604,10 @@ class Compiler
   # Recognize an alphanumeric character.
   def alnum?(char)
     alpha?(char) || digit?(char)
+  end
+
+  def boolean?(char)
+    char == 't' || char == 'f'
   end
 
   def whitespace?(char)
@@ -451,7 +658,7 @@ class Compiler
   end
 
   # Parse a number.
-  def get_num
+  def get_number
     expected(:integer) unless digit?(@look)
     many(method(:digit?))
   end
@@ -473,13 +680,21 @@ class Compiler
   end
 
   # Define a variable with the given name and size (in dwords).
-  def var(name, dwords=1)
-    unless @vars[name]
+  def defvar(name, dwords=1)
+    unless var?(name)
       @bss << "#{name}: resd #{dwords}\n"
       @vars[name] = name
-    # else
-    #   raise ParseError, "identifier #{name} redefined"
+    else
+      STDERR.puts "[warning] attempted to redefine #{name}"
     end
+  end
+
+  def var?(name)
+    @vars[name]
+  end
+
+  def var(name)
+    @vars[name]
   end
 
   # Emit a line of code wrapped between a tab and a newline.
@@ -506,7 +721,11 @@ class Compiler
   # Some asm methods for convenience and arity checks.
 
   def x86_mov(dest, src)
-    emit("mov #{dest}, #{src}")
+    emit("mov #{dest}, #{src.is_a?(Numeric) ? "0x#{src.to_s(16)}" : src}")
+  end
+
+  def x86_movzx(dest, src)
+    emit("movzx #{dest}, #{src}")
   end
 
   def x86_add(dest, src)
@@ -529,8 +748,16 @@ class Compiler
     emit("inc #{op}")
   end
 
+  def x86_dec(op)
+    emit("dec #{op}")
+  end
+
   def x86_push(reg)
     emit("push #{reg}")
+  end
+
+  def x86_pop(reg)
+    emit("pop #{reg}")
   end
 
   def x86_call(label)
@@ -541,8 +768,20 @@ class Compiler
     emit("neg #{reg}")
   end
 
+  def x86_not(rm32)
+    emit("not #{rm32}")
+  end
+
   def x86_xchg(op1, op2)
     emit("xchg #{op1}, #{op2}")
+  end
+
+  def x86_and(op1, op2)
+    emit("and #{op1}, #{op2}")
+  end
+
+  def x86_or(op1, op2)
+    emit("or #{op1}, #{op2}")
   end
 
   def x86_xor(op1, op2)
@@ -561,11 +800,27 @@ class Compiler
     emit("jmp #{label}")
   end
 
+  def x86_jl(label)
+    emit("jl #{label}")
+  end
+
   def x86_cmp(a, b)
     emit("cmp #{a}, #{b}")
   end
 
+  def x86_lea(a, b)
+    emit("lea #{a}, #{b}")
+  end
+
+  def x86_shr(a, b)
+    emit("shr #{a}, #{b}")
+  end
+
   def x86_loop(label)
     emit("loop #{label}")
+  end
+
+  def x86_int(num)
+    emit("int 0x#{num.to_s(16)}")
   end
 end

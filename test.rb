@@ -32,7 +32,7 @@ def main(arg)
   data, bss, code = *parse(input)
   template = File.read("template.asm")
   asm = interpolate(template, :data => data, :bss => bss, :code => code)
-  File.open("test.asm", "w") { |f| f.puts(asm) }
+  STDOUT.puts(asm)
 end
 
 main(ARGV[0].to_s)
