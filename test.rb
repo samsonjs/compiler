@@ -35,4 +35,20 @@ def main(arg)
   STDOUT.puts(asm)
 end
 
+Blacklist = [:eof?, :many, :whitespace?, :op_char?, :skip_whitespace,
+             :any_whitespace?, :skip_any_whitespace, :emit, :indent,
+             :newline?, :digit?, :alpha?, :newline?, :get_char,
+             :get_op, :op?, :alnum?, :get_name, :get_number]
+
+if false
+set_trace_func proc { |event, file, line, id, binding, classname|
+  if classname == Compiler    &&
+      event != 'line'         &&
+      !Blacklist.include?(id) &&
+      id.to_s[0,4] != 'x86_'
+    printf "%8s %-2d %10s\n", event, line, id
+  end
+}
+end
+
 main(ARGV[0].to_s)

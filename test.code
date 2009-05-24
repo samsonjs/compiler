@@ -1,60 +1,65 @@
 a=1
+print a
 aa=10
+print aa
 somethinglong=65536
+print somethinglong
 x=5*(3-5)
-c=1--a
-g=1*-1
+print x
+c=1- -a
+print c
+g=1* -1
+print g
 h=x*2+2
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
 n=m+85
 
-i 1
+if 1
   x=3
-  i 1 c=4
-  e
-e
-i1x=3
-i1c=4
-ee
+  if 1 c=4
+  end
+end
+if 1x=3 if 1c=4 end end
 
-i 1 > 2
+if 1 > 2
   x=3
-  i 1 c=4
-  e
-l
- x=2
-e
+  if 1 c=4
+  end
+else
+  x=2
+end
 
-w 0
-  w a < 10
+while 0
+  while a < 10
     a = a + 1
-  e
-e
+  end
+end
 
-u a = 0
+until a == 0
   a = a - 1
-  i t
-    b
-  e  
-e
+  if -1
+    break
+  end
+end
 
 cc = c
-r
+repeat
   cc = cc * 2
-  i cc = 32
-    b
-  e
-e
+  if cc == 32
+    break
+  end
+end
 
 s=0
-f x = 1 .. 5
+for x = 1 to 5
   s = s + x
-e
+end
 
-d 10
+do 10
   a = a * a
-e
+end
 
-xitcode=(1 < 1)
+xitcode=a-a

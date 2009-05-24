@@ -6,6 +6,9 @@
 # sjs
 # may 2009
 
+require 'rubygems'
+require 'unroller'
+
 class ParseError < StandardError
   attr_reader :caller, :context
   def initialize(caller, context=nil)
@@ -16,22 +19,24 @@ end
 
 class Compiler
   attr_reader :data, :bss, :code
+
+  Keywords = %w[
+    if else end while until repeat for to do break
+    print
+  ]
   
   def initialize(input=STDIN)
-    @look = ''                   # next lookahead char
+    @look = ''                   # lookahead char
+    @token = nil                 # type of last read token
+    @value = nil                 # value of last read token
     @input = input               # stream to read from
     @data = ''                   # data section
     @bss = ''                    # bss section
     @code = ''                   # code section
-    @vars = {}                   # symbol table
+    @vars = {}                   # defined variables
     @num_labels = 0              # used to generate unique labels
     @num_labels_with_suffix = Hash.new(0)
-
-    # reserved words (... constant?)
-    #
-    # if, else, end, while, until, repeat, do, for, break, true, false, print,
-    # not, and, or, add, subtract, multiply, divide, xor, bool tests
-    @keywords = %w[i l e w u r f d b t f p ! & | + - * / ^ = < > #]
+    @indent = 0                  # for pretty printing
 
     # seed the lexer
     get_char
@@ -43,6 +48,25 @@ class Compiler
     [@data, @bss, @code]
   end
 
+  # Scan the input stream for the next token.
+  def scan
+    return if @look.nil?        # eof
+    if alpha?(@look)
+      get_name
+    elsif digit?(@look)
+      get_number
+    elsif op_char?(@look)
+      get_op
+    elsif newline?(@look)
+      skip_any_whitespace
+      scan
+    else
+      # XXX default to single char op... should probably raise.
+      @token = :op
+      @value = @look
+      get_char
+    end
+  end
 
   # Parse and translate an identifier or function call.
   def identifier
@@ -69,16 +93,16 @@ class Compiler
     elsif alpha?(@look)
       identifier                # or call
     elsif digit?(@look)
-      x86_mov(:eax, get_number)
+      x86_mov(:eax, get_number.to_i)
     else
-      expected(:'integer, identifier, function call, or parenthesized expression')
+      expected(:'integer, identifier, function call, or parenthesized expression', :got => @look)
     end
   end
 
   # Parse a signed factor.
   def signed_factor
     sign = @look
-    match(sign) if sign == '-' || sign == '+'
+    match(sign) if op?(:unary, sign)
     factor
     x86_neg(:eax) if sign == '-'
   end
@@ -88,20 +112,13 @@ class Compiler
   def term
     signed_factor                      # Result in eax.
 
-    while mulop?
-      # Stash the 1st factor on the stack.  This is expected by
-      # multiply & divide.  Because they leave their results in eax
-      # associativity works.  Each interim result is pushed on the
-      # stack here.
-      x86_push(:eax)
-
-      if @look == '*'
-        multiply
-      else
-        divide
+    while op?(:mul, @look)
+      pushing(:eax) do
+        case @look
+        when '*': multiply
+        when '/': divide
+        end
       end
-
-      x86_add(:esp, 4)        # Remove the 1st factor from the stack.
     end
   end
 
@@ -110,20 +127,13 @@ class Compiler
   def expression
     term                      # Result is in eax.
 
-    while addop?
-      # Stash the 1st term on the stack.  This is expected by add &
-      # subtract.  Because they leave their results in eax
-      # associativity works.  Each interim result is pushed on the
-      # stack here.
-      x86_push(:eax)
-
-      if @look == '+'
-        add
-      else
-        subtract
+    while op_char?(@look, :add)
+      pushing(:eax) do
+        case @look
+        when '+': add
+        when '-': subtract
+        end
       end
-
-      x86_add(:esp, 4)        # Remove 1st term (a) from the stack.
     end
   end
 
@@ -168,55 +178,61 @@ class Compiler
   end
 
 
+  ###################
+  # bit expressions #
+  ###################
+
+  def bitor_expr
+    match('|')
+    term
+    x86_or(:eax, '[esp]')
+  end
+
+  def bitand_expr
+    match('&')
+    signed_factor
+    x86_and(:eax, '[esp]')
+  end
+
+  def xor_expr
+    match('^')
+    term
+    x86_xor(:eax, '[esp]')
+  end
+
+
   #######################
   # boolean expressions #
   #######################
 
   def boolean_expression
     boolean_term
-
-    while orop?
-      x86_push(:eax)
-      case @look
-      when '|': or_expr
-      when '^': xor_expr
+    while @look == '|'
+      op '||' do
+        boolean_term
+        emit("<logical or>")
       end
-      x86_add(:esp, 4)
     end
-  end
-
-  def or_expr
-    match('|')
-    boolean_term
-    x86_or(:eax, '[esp]')
-  end
-
-  def xor_expr
-    match('^')
-    boolean_term
-    x86_xor(:eax, '[esp]')
   end
 
   def boolean_term
     not_factor
-
-    while andop?
-      x86_push(:eax)
-      # and_expr
-      match('&')
-      not_factor
-      x86_and(:eax, '[esp]')
-      x86_add(:esp, 4)
+    while @look == '&'
+      op '&&' do
+        not_factor
+        emit("<logical and>")
+      end
     end
   end
 
   def boolean_factor
     if boolean?(@look)
-      if get_boolean
+      if get_boolean == 'true'
         x86_mov(:eax, -1)
       else
         x86_xor(:eax, :eax)
       end
+      scan
     else
       relation
     end
@@ -243,51 +259,41 @@ class Compiler
     emit_label(end_label)
   end
 
-  def get_boolean
-    expected(:boolean) unless boolean?(@look)
-    value = @look == 't'
-    get_char
-    value
-  end
-
   def relation
     expression
-    if relop?
-      x86_push(:eax)
-      case @look
-      when '=': eq_relation
-      when '#': neq_relation
-      when '>': gt_relation
-      when '<': lt_relation
-      # TODO ge, le (needs real tokens)
+    if op_char?(@look, :rel)
+      scan
+      pushing(:eax) do
+        case @value
+        when '==': eq_relation
+        when '!=': neq_relation
+        when '>': gt_relation
+        when '>=': ge_relation
+        when '<': lt_relation
+        when '<=': le_relation
+        end
       end
     end
   end
 
   def eq_relation
-    match('=')
     expression
-    x86_pop(:ebx)
-    x86_sub(:eax, :ebx)
+    x86_sub(:eax, '[esp]')
     make_boolean
     x86_not(:eax)
   end
 
   def neq_relation
-    match('#')
     expression
-    x86_pop(:ebx)
-    x86_sub(:eax, :ebx)
+    x86_sub(:eax, '[esp]')
     make_boolean
   end
 
   def gt_relation
-    match('>')
     gt_label = unique_label(:gt)
     end_label = unique_label(:endgt)
     expression
-    x86_pop(:ebx)
-    x86_cmp(:eax, :ebx)         # b - a < 0 if a > b
+    x86_cmp(:eax,  '[esp]')         # b - a < 0 if a > b
     x86_jl(gt_label)
     x86_xor(:eax, :eax)
     x86_jmp(end_label)
@@ -298,12 +304,10 @@ class Compiler
   end
 
   def lt_relation
-    match('<')
     lt_label = unique_label(:lt)
     end_label = unique_label(:endlt)
     expression
-    x86_pop(:ebx)
-    x86_cmp(:ebx, :eax)         # a - b < 0 if a < b
+    x86_cmp('[esp]', :eax)         # a - b < 0 if a < b
     x86_jl(lt_label)
     x86_xor(:eax, :eax)
     x86_jmp(end_label)
@@ -313,6 +317,34 @@ class Compiler
     emit_label(end_label)
   end
 
+  # def ge_relation
+  #   ge_label = unique_label(:ge)
+  #   end_label = unique_label(:endge)
+  #   expression
+  #   x86_cmp(:eax,  '[esp]')         # b - a < 0 if a > b
+  #   x86_jl(gt_label)
+  #   x86_xor(:eax, :eax)
+  #   x86_jmp(end_label)
+  #   emit_label(gt_label)
+  #   x86_xor(:eax, :eax)
+  #   x86_not(:eax)
+  #   emit_label(end_label)
+  # end
+
+  # def lt_relation
+  #   lt_label = unique_label(:lt)
+  #   end_label = unique_label(:endlt)
+  #   expression
+  #   x86_cmp('[esp]', :eax)         # a - b < 0 if a < b
+  #   x86_jl(lt_label)
+  #   x86_xor(:eax, :eax)
+  #   x86_jmp(end_label)
+  #   emit_label(lt_label)
+  #   x86_xor(:eax, :eax)
+  #   x86_not(:eax)
+  #   emit_label(end_label)
+  # end
+
 
   ######################################
   # statements and controls structures #
@@ -320,7 +352,7 @@ class Compiler
 
   # Parse an assignment statement.  Value is in eax.
   def assignment
-    name = get_name
+    name = @value
     match('=')
     boolean_expression
     defvar(name) unless var?(name)
@@ -329,100 +361,108 @@ class Compiler
 
   # Parse a code block.
   def block(label=nil)
-    until @look == 'l' || @look == 'e' || eof?
-      case @look
-      when 'i'
-        if_else_stmt(label)
-      when 'w'
-        while_stmt
-      when 'u'
-        until_stmt
-      when 'r'
-        repeat_stmt
-      when 'f'
-        for_stmt
-      when 'd'
-        do_stmt
-      when 'b'
-        break_stmt(label)
-      when 'p'
-        print_stmt
-        newline
+    scan
+    until @value == 'else' || @value == 'end' || eof?
+      if @token == :keyword
+        case @value
+        when 'if'
+          if_else_stmt(label)
+        when 'while'
+          while_stmt
+        when 'until'
+          until_stmt
+        when 'repeat'
+          repeat_stmt
+        when 'for'
+          for_stmt
+        when 'do'
+          do_stmt
+        when 'break'
+          break_stmt(label)
+        when 'print'
+          print_stmt
+        else
+          raise "unsupported keyword: #{@value}"
+        end
       else
         assignment
-        newline
       end
-      skip_any_whitespace
+      scan
     end
   end
   
   # Parse an if-else statement.
   def if_else_stmt(label)
-    match('i')
     else_label = unique_label(:end_or_else)
-    end_label = else_label      # only generated if else clause present
+    end_label = else_label      # only generated if else clause
+                                # present
     condition
     skip_any_whitespace
     x86_jz(else_label)
+    @indent += 1
     block(label)
-    if @look == 'l'
-      match('l')
+    @indent -= 1
+    if @token == :keyword && @value == 'else'
       skip_any_whitespace
       end_label = unique_label(:endif) # now we need the 2nd label
       x86_jmp(end_label)
       emit_label(else_label)
+      @indent += 1
       block(label)
+      @indent -= 1
     end
-    match('e')
+    match_word('end')
     emit_label(end_label)
   end
 
   def while_stmt
-    match('w')
     while_label = unique_label(:while)
     end_label = unique_label(:endwhile)
     emit_label(while_label)
     condition
     skip_any_whitespace
     x86_jz(end_label)
+    @indent += 1
     block(end_label)
-    match('e')
+    @indent -= 1
+    match_word('end')
     x86_jmp(while_label)
     emit_label(end_label)
   end
 
   def until_stmt
-    match('u')
     until_label = unique_label(:until)
     end_label = unique_label(:enduntil)
     emit_label(until_label)
     condition
     skip_any_whitespace
     x86_jnz(end_label)
+    @indent += 1
     block(end_label)
-    match('e')
+    @indent -= 1
+    match_word('end')
     x86_jmp(until_label)
     emit_label(end_label)
   end
 
   def repeat_stmt
-    match('r')
     skip_any_whitespace         # no condition, slurp whitespace
     repeat_label = unique_label(:repeat)
     end_label = unique_label(:endrepeat)
     emit_label(repeat_label)
+    @indent += 1
     block(end_label)
-    match('e')
+    @indent -= 1
+    match_word('end')
     x86_jmp(repeat_label)
     emit_label(end_label)
   end
 
   # s = 0
-  # f x = 1 >> 5
+  # f x = 1 to 5
   #   s = s + x
   # e
   def for_stmt
-    match('f')
     start_label = unique_label(:for)
     end_label = unique_label(:endfor)
     counter = "[#{get_name}]"
@@ -431,7 +471,7 @@ class Compiler
     x86_sub(:eax, 1)            # pre-decrement because of the
                                 # following pre-increment
     x86_mov(counter, :eax)      # stash the counter in memory
-    match('.'); match('.')
+    match_word('to', :scan => true)
     boolean_expression          # final value
     skip_any_whitespace
     x86_push(:eax)              # stash final value on stack
@@ -442,8 +482,10 @@ class Compiler
     x86_mov(counter, :ecx)      # store the counter
     x86_cmp(final, :ecx)        # check if we're done
     x86_jz(end_label)           # if so jump to the end
+    @indent += 1
     block(end_label)            # otherwise execute the block
-    match('e')
+    @indent -= 1
+    match_word('end')
     x86_jmp(start_label)        # lather, rinse, repeat
     emit_label(end_label)
     x86_add(:esp, 4)            # clean up the stack
@@ -453,7 +495,6 @@ class Compiler
   #   ...
   # e
   def do_stmt
-    match('d')
     start_label = unique_label(:do)
     end_label = unique_label(:enddo)
     boolean_expression
@@ -463,9 +504,11 @@ class Compiler
     counter = '[esp]'
     emit_label(start_label)
     x86_mov(counter, :ecx)
+    @indent += 1
     block(end_label)
+    @indent -= 1
     x86_mov(:ecx, counter)
-    match('e')
+    match_word('end')
     x86_loop(start_label)
     x86_sub(:esp, 4)
     emit_label(end_label)
@@ -473,7 +516,6 @@ class Compiler
   end
 
   def break_stmt(label)
-    match('b')
     if label
       x86_jmp(label)
     else
@@ -489,8 +531,8 @@ class Compiler
     x86_cmp(:eax, 0)            # 0 is false, anything else is true
   end
 
+  # print eax in hex format
   def print_stmt
-    match('p')
     # define a lookup table of digits
     unless var?('DIGITS')
       defvar('DIGITS', 4)
@@ -543,24 +585,31 @@ class Compiler
     @input.eof? && @look.nil?
   end
 
-  def addop?
-    @look == '+' || @look == '-'
+  Ops = {
+    :add    => %w[+ -],
+    :mul    => %w[* /],
+    :rel    => %w[== != < > <= >=],
+    :or     => %w[||],
+    :and    => %w[&&],
+    :bitor  => %w[| ^],
+    :bitand => %w[&],
+    :unary  => %w[- +]
+  }
+  # Op chars are chars that can begin an op, so OpChars needs to be a
+  # map of kinds of operators to a list of valid prefix chars.
+  OpChars = Ops.inject({}) { |hash, kv|
+    key, val = *kv
+    hash[key] = val.map {|op| op[0, 1]} # slice off first char for each op
+    hash
+  # Include :all for a very general test.
+  }.merge(:all => Ops.values.flatten.map{|op| op[0, 1]}.sort.uniq)
+
+  def op_char?(char, kind=:all)
+    OpChars[kind].include?(char)
   end
 
-  def mulop?
-    @look == '*' || @look == '/'
-  end
-
-  def relop?
-    @look == '=' || @look == '#' || @look == '<' || @look == '>'
-  end
-
-  def orop?
-    @look == '|' || @look == '^'
-  end
-
-  def andop?
-    @look == '&'
+  def op?(kind, token)
+    Ops[kind].include?(token)
   end
 
   # Read the next character from the input stream.
@@ -579,7 +628,7 @@ class Compiler
 
   # Report what was expected
   def expected(what, options={})
-    got = options.has_key?(:got) ? options[:got] : @look
+    got = options.has_key?(:got) ? options[:got] : @value
     got, what = *[got, what].map {|x| x.is_a?(Symbol) ? x : "'#{x}'" }
     if eof?
       raise ParseError.new(caller), "Premature end of file, expected: #{what}."
@@ -603,40 +652,53 @@ class Compiler
 
   # Recognize an alphanumeric character.
   def alnum?(char)
-    alpha?(char) || digit?(char)
+    alpha?(char) || digit?(char) || char == '_'
   end
 
+  # XXX disabled! ... should treat true/false as constants
   def boolean?(char)
     char == 't' || char == 'f'
+    false
   end
 
   def whitespace?(char)
     char == ' ' || char == "\t"
   end
 
+  def newline?(char)
+    char == "\n" || char == "\r"
+  end
+
   def any_whitespace?(char)
-    char == ' ' || char == "\t" || char == "\n" || char == "\r"
+    whitespace?(char) || newline?(char)
   end
 
   # Parse one or more newlines.
-  def newline
-    if @look == "\n" || @look == "\r"
-      get_char while @look == "\n" || @look == "\r"
-    else
-      expected(:newline)
-    end
+  def get_newline
+    expected(:newline, :got => @look) unless newline?(@look)
+    many(:newline?)
+    @token = :newline
+    @value = "\n"
   end
 
-  # Match a specific input character.
+  # Match literal input.
   def match(char)
-    expected(char) unless @look == char
+    expected(char, :got => @look) unless @look == char
+    # puts "[ch] #{indent}#{char}"
     get_char
     skip_whitespace
+  end
+
+  # Match literal input.
+  def match_word(word, options={})
+    scan if options[:scan]
+    expected(word) unless @value == word
   end
 
   # Parse zero or more consecutive characters for which the test is
   # true.
   def many(test)
+    test = method(test) if test.is_a?(Symbol)
     token = ''
     while test[@look]
       token << @look
@@ -646,21 +708,35 @@ class Compiler
     token
   end
 
-
-  # Parse a name (identifier).
+  # Parse a "name" (keyword or identifier).
   def get_name
     expected(:identifier) unless alpha?(@look)
-    name = many(method(:alnum?))
-    if @keywords.include?(name)
-      expected(:identifier, :got => :keyword)
-    end
-    name
+    @value = many(:alnum?)
+    @token = Keywords.include?(@value) ? :keyword : :identifier
+    @value
   end
 
   # Parse a number.
   def get_number
     expected(:integer) unless digit?(@look)
-    many(method(:digit?))
+    @token = :number
+    @value = many(:digit?)
+    # puts "[nu] #{indent}#{@value} (0x#{@value.to_i.to_s(16)})"
+    @value
+  end
+
+  def get_boolean
+    get_name
+    expected(:boolean) unless @value == 'true' || @value == 'false'
+    @token = :boolean
+    # puts "[bo] #{indent}#{@value}"
+    @value
+  end
+
+  def get_op
+    expected(:operator) unless op_char?(@look)
+    @token = :op
+    @value = many(:op_char?)
   end
 
   # Skip leading whitespace.
@@ -717,8 +793,66 @@ class Compiler
     "L#{sprintf "%06d", @num_labels}#{suffix}"
   end
 
+  def indent
+    real_indent = if @value == 'else' || @value == 'end'
+                    @indent - 1
+                  else
+                    @indent
+                  end
+    ' ' * (real_indent * 4)
+  end
 
-  # Some asm methods for convenience and arity checks.
+  def pushing(reg)
+    x86_push(reg)
+    yield
+    x86_add(:esp, 4)
+  end
+
+  def op(name)
+    pushing(:eax) do
+      get_op
+      expected(name) unless match_word(name)
+      yield
+    end
+  end
+
+
+  class <<self
+    def hook(callback, *methods)
+      methods.each do |m|
+        orig = :"orig_#{m}"
+        alias_method orig, m
+        define_method(m) do
+          val = send(orig)
+          send(callback)
+          val
+        end
+      end
+    end
+  end
+
+  def print_token
+    print(case @token
+          when :keyword: '[kw] '
+          when :number: '[nu] '
+          when :identifier: '[id] '
+          when :op: '[op] '
+          when :boolean: '[bo] '
+          when :newline: ''
+          else
+            raise "print doesn't know about #{@token}: #{@value}"
+          end)
+    print indent
+    puts @value
+  end
+
+  # hook(:print_token,
+  #   :get_name, :get_newline, :get_number, :get_op, :get_boolean)
+
+
+  ######################
+  # assembler routines #
+  ######################
 
   def x86_mov(dest, src)
     emit("mov #{dest}, #{src.is_a?(Numeric) ? "0x#{src.to_s(16)}" : src}")
