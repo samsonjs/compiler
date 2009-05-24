@@ -12,6 +12,8 @@
 # require 'rubygems'
 # require 'unroller'
 
+require 'asm'
+
 class ParseError < StandardError
   attr_reader :caller, :context
   def initialize(caller, context=nil)
@@ -21,6 +23,9 @@ class ParseError < StandardError
 end
 
 class Compiler
+  # This module uses our `emit` method to output x86 code for nasm.
+  include Assembler::X86
+
   attr_reader :data, :bss, :code
 
   Keywords = %w[
@@ -875,112 +880,4 @@ class Compiler
   # hook(:print_token,
   #   :get_name, :get_newline, :get_number, :get_op, :get_boolean)
 
-
-  ######################
-  # assembler routines #
-  ######################
-
-  def x86_mov(dest, src)
-    emit("mov #{dest}, #{src.is_a?(Numeric) ? "0x#{src.to_s(16)}" : src}")
-  end
-
-  def x86_movzx(dest, src)
-    emit("movzx #{dest}, #{src}")
-  end
-
-  def x86_add(dest, src)
-    emit("add #{dest}, #{src}")
-  end
-
-  def x86_sub(dest, src)
-    emit("sub #{dest}, #{src}")
-  end
-
-  def x86_imul(op)
-    emit("imul #{op}")
-  end
-
-  def x86_idiv(op)
-    emit("idiv #{op}")
-  end
-
-  def x86_inc(op)
-    emit("inc #{op}")
-  end
-
-  def x86_dec(op)
-    emit("dec #{op}")
-  end
-
-  def x86_push(reg)
-    emit("push #{reg}")
-  end
-
-  def x86_pop(reg)
-    emit("pop #{reg}")
-  end
-
-  def x86_call(label)
-    emit("call #{label}")
-  end
-
-  def x86_neg(reg)
-    emit("neg #{reg}")
-  end
-
-  def x86_not(rm32)
-    emit("not #{rm32}")
-  end
-
-  def x86_xchg(op1, op2)
-    emit("xchg #{op1}, #{op2}")
-  end
-
-  def x86_and(op1, op2)
-    emit("and #{op1}, #{op2}")
-  end
-
-  def x86_or(op1, op2)
-    emit("or #{op1}, #{op2}")
-  end
-
-  def x86_xor(op1, op2)
-    emit("xor #{op1}, #{op2}")
-  end
-
-  def x86_jz(label)
-    emit("jz #{label}")
-  end
-
-  def x86_jnz(label)
-    emit("jnz #{label}")
-  end
-
-  def x86_jmp(label)
-    emit("jmp #{label}")
-  end
-
-  def x86_jl(label)
-    emit("jl #{label}")
-  end
-
-  def x86_cmp(a, b)
-    emit("cmp #{a}, #{b}")
-  end
-
-  def x86_lea(a, b)
-    emit("lea #{a}, #{b}")
-  end
-
-  def x86_shr(a, b)
-    emit("shr #{a}, #{b}")
-  end
-
-  def x86_loop(label)
-    emit("loop #{label}")
-  end
-
-  def x86_int(num)
-    emit("int 0x#{num.to_s(16)}")
-  end
 end
