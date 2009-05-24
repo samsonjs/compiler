@@ -6,8 +6,11 @@
 # sjs
 # may 2009
 
-require 'rubygems'
-require 'unroller'
+# XXX Comment if unused, unroller is too fucking slow! rubygems is a bit
+#     of a slouch too.
+# 
+# require 'rubygems'
+# require 'unroller'
 
 class ParseError < StandardError
   attr_reader :caller, :context
@@ -42,7 +45,7 @@ class Compiler
     get_char
   end
 
-  def parse
+  def compile
     block
     expected(:'end of file') unless eof?
     [@data, @bss, @code]
@@ -276,74 +279,90 @@ class Compiler
     end
   end
 
-  def eq_relation
-    expression
-    x86_sub(:eax, '[esp]')
-    make_boolean
-    x86_not(:eax)
-  end
-
+  # a: [esp]
+  # b: eax
+  # 
+  # If b - a is zero then a = b, and make_boolean will leave the zero
+  # to effectively return false.  If b - a is non-zero then a != b,
+  # and make_boolean will leave -1 (true) for us in eax.
   def neq_relation
     expression
     x86_sub(:eax, '[esp]')
     make_boolean
   end
 
+  # Invert the != test for equal.
+  def eq_relation
+    neq_relation
+    x86_not(:eax)
+  end
+
+  # > and < are both implemented in terms of jl (jump if less than).
+  # We exploit the fact that cmp is the subtraction of src from dest
+  # and order the terms appropriately for each function.  As for >=
+  # and <=, they in turn are implemented in terms of > and <.  a is
+  # greater than or equal to b if and only if a is *not* less than b.
+
+  # The next 4 relations all compare 2 values a and b, then return
+  # true (-1) if the difference was below zero and false (0)
+  # otherwise (using JL, jump if less than).
+  def cmp_relation(a, b, options={})
+    # Invert the sense of the test?
+    invert = options[:invert]
+
+    true_label = unique_label(:cmp)
+    end_label = unique_label(:endcmp)
+    x86_cmp(a, b)
+    x86_jl(true_label)
+
+    x86_xor(:eax, :eax)         # return false
+    x86_not(:eax) if invert     # (or true if inverted)
+    x86_jmp(end_label)
+
+    emit_label(true_label)
+    x86_xor(:eax, :eax)          # return true
+    x86_not(:eax) unless invert  # (or false if inverted)
+
+    emit_label(end_label)
+  end
+
+  # a: [esp]
+  # b: eax
+  #
+  # if a > b then b - a < 0
   def gt_relation
-    gt_label = unique_label(:gt)
-    end_label = unique_label(:endgt)
     expression
-    x86_cmp(:eax,  '[esp]')         # b - a < 0 if a > b
-    x86_jl(gt_label)
-    x86_xor(:eax, :eax)
-    x86_jmp(end_label)
-    emit_label(gt_label)
-    x86_xor(:eax, :eax)
-    x86_not(:eax)
-    emit_label(end_label)
+    cmp_relation(:eax, '[esp]') # b - a
   end
 
+  # a: [esp]
+  # b: eax
+  #
+  # if a < b then a - b < 0
   def lt_relation
-    lt_label = unique_label(:lt)
-    end_label = unique_label(:endlt)
     expression
-    x86_cmp('[esp]', :eax)         # a - b < 0 if a < b
-    x86_jl(lt_label)
-    x86_xor(:eax, :eax)
-    x86_jmp(end_label)
-    emit_label(lt_label)
-    x86_xor(:eax, :eax)
-    x86_not(:eax)
-    emit_label(end_label)
+    cmp_relation('[esp]', :eax) # a - b
   end
 
-  # def ge_relation
-  #   ge_label = unique_label(:ge)
-  #   end_label = unique_label(:endge)
-  #   expression
-  #   x86_cmp(:eax,  '[esp]')         # b - a < 0 if a > b
-  #   x86_jl(gt_label)
-  #   x86_xor(:eax, :eax)
-  #   x86_jmp(end_label)
-  #   emit_label(gt_label)
-  #   x86_xor(:eax, :eax)
-  #   x86_not(:eax)
-  #   emit_label(end_label)
-  # end
+  # a: [esp]
+  # b: eax
+  #
+  # if a >= b then !(a < b)
+  def ge_relation
+    expression
+    # Compare them as in less than but invert the result.
+    cmp_relation('[esp]', :eax, :invert => true)
+  end
 
-  # def lt_relation
-  #   lt_label = unique_label(:lt)
-  #   end_label = unique_label(:endlt)
-  #   expression
-  #   x86_cmp('[esp]', :eax)         # a - b < 0 if a < b
-  #   x86_jl(lt_label)
-  #   x86_xor(:eax, :eax)
-  #   x86_jmp(end_label)
-  #   emit_label(lt_label)
-  #   x86_xor(:eax, :eax)
-  #   x86_not(:eax)
-  #   emit_label(end_label)
-  # end
+  # a: [esp]
+  # b: eax
+  # 
+  # if a <= b then !(a > b)
+  def le_relation
+    expression
+    # Compare them as in greater than but invert the result.
+    cmp_relation(:eax, '[esp]', :invert => true)
+  end
 
 
   ######################################
@@ -415,47 +434,46 @@ class Compiler
     emit_label(end_label)
   end
 
-  def while_stmt
-    while_label = unique_label(:while)
-    end_label = unique_label(:endwhile)
-    emit_label(while_label)
-    condition
-    skip_any_whitespace
-    x86_jz(end_label)
+  # Used to implement the Two-Label-Loops (while, until, repeat).
+  # 
+  # name:  Name of the loop for readable labels.
+  # block: Code to execute at the start of each iteration. (e.g. a
+  #        condition)
+  def simple_loop(name)
+    start_label = unique_label(:"loop_#{name}")
+    end_label = unique_label(:"end_#{name}")
+    emit_label(start_label)
+
+    yield(end_label)
+
     @indent += 1
     block(end_label)
     @indent -= 1
     match_word('end')
-    x86_jmp(while_label)
+    x86_jmp(start_label)
     emit_label(end_label)
+  end
+
+  def while_stmt
+    simple_loop('while') do |end_label|
+      condition
+      skip_any_whitespace
+      x86_jz(end_label)
+    end
   end
 
   def until_stmt
-    until_label = unique_label(:until)
-    end_label = unique_label(:enduntil)
-    emit_label(until_label)
-    condition
-    skip_any_whitespace
-    x86_jnz(end_label)
-    @indent += 1
-    block(end_label)
-    @indent -= 1
-    match_word('end')
-    x86_jmp(until_label)
-    emit_label(end_label)
+    simple_loop('until') do |end_label|
+      condition
+      skip_any_whitespace
+      x86_jnz(end_label)
+    end
   end
 
   def repeat_stmt
-    skip_any_whitespace         # no condition, slurp whitespace
-    repeat_label = unique_label(:repeat)
-    end_label = unique_label(:endrepeat)
-    emit_label(repeat_label)
-    @indent += 1
-    block(end_label)
-    @indent -= 1
-    match_word('end')
-    x86_jmp(repeat_label)
-    emit_label(end_label)
+    simple_loop('repeat') do |end_label|
+      skip_any_whitespace
+    end
   end
 
   # s = 0
@@ -463,8 +481,6 @@ class Compiler
   #   s = s + x
   # e
   def for_stmt
-    start_label = unique_label(:for)
-    end_label = unique_label(:endfor)
     counter = "[#{get_name}]"
     match('=')
     boolean_expression          # initial value
@@ -476,42 +492,52 @@ class Compiler
     skip_any_whitespace
     x86_push(:eax)              # stash final value on stack
     final = '[esp]'
-    emit_label(start_label)
-    x86_mov(:ecx, counter)      # get the counter
-    x86_add(:ecx, 1)            # increment
-    x86_mov(counter, :ecx)      # store the counter
-    x86_cmp(final, :ecx)        # check if we're done
-    x86_jz(end_label)           # if so jump to the end
-    @indent += 1
-    block(end_label)            # otherwise execute the block
-    @indent -= 1
-    match_word('end')
-    x86_jmp(start_label)        # lather, rinse, repeat
-    emit_label(end_label)
+
+    simple_loop('for') do |end_label|
+      x86_mov(:ecx, counter)      # get the counter
+      x86_add(:ecx, 1)            # increment
+      x86_mov(counter, :ecx)      # store the counter
+      x86_cmp(final, :ecx)        # check if we're done
+      x86_jz(end_label)           # if so jump to the end
+    end
+
     x86_add(:esp, 4)            # clean up the stack
   end
 
-  # d 5
+  # do 5
   #   ...
-  # e
+  # end
   def do_stmt
-    start_label = unique_label(:do)
-    end_label = unique_label(:enddo)
+
     boolean_expression
     skip_any_whitespace
     x86_mov(:ecx, :eax)
     x86_push(:ecx)
-    counter = '[esp]'
+
+    start_label = unique_label(:do)
+    end_label = unique_label(:enddo)
     emit_label(start_label)
-    x86_mov(counter, :ecx)
+
+    x86_push(:ecx)
+
     @indent += 1
     block(end_label)
     @indent -= 1
-    x86_mov(:ecx, counter)
+
+    x86_pop(:ecx)
+
     match_word('end')
     x86_loop(start_label)
+
+    # Phony push!  break needs to clean up the stack, but since we
+    # don't know if there is a break at this point we fake a push and
+    # always clean up the stack after.
     x86_sub(:esp, 4)
+
     emit_label(end_label)
+
+    # If there was a break we have to clean up the stack here.  If
+    # there was no break we clean up the phony push above.
     x86_add(:esp, 4)
   end
 
@@ -700,7 +726,7 @@ class Compiler
   def many(test)
     test = method(test) if test.is_a?(Symbol)
     token = ''
-    while test[@look]
+    while !eof? && test[@look]
       token << @look
       get_char
     end
