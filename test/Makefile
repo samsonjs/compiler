@@ -51,3 +51,5 @@ clean:
 	@rm -f test_big test_lt test_gt test_ge test_le test_eq test_neq
 	@rm -f test_while test_if test_until test_repeat test_do
 	@rm -f test_for test_break test_print
+
+.PHONY: clean
