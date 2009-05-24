@@ -671,6 +671,21 @@ class Compiler
     emit("idiv #{op}")
   end
 
+  def x86_inc(op)
+    emit("inc #{op}")
+
+    asm do
+      if register?(op)
+        emit_byte(0x40 + regnum(op))
+      elsif rm32?(op)
+        emit_byte(0xff)
+        emit_modrm(
+      else
+        raise "unsupported op #{op}, wanted r32 or r/m32"
+      end
+    end
+  end
+
   def x86_push(reg)
     emit("push #{reg}")
   end
