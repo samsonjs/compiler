@@ -1,0 +1,11 @@
+a=10
+b=0
+repeat
+  a=a-5
+  b=b+1
+  if b == 2
+    break
+  end
+end
+c=a+b-2
+  

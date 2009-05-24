@@ -1,0 +1,65 @@
+a=1
+print a
+aa=10
+print aa
+somethinglong=65536
+print somethinglong
+x=5*(3-5)
+print x
+c=1- -a
+print c
+g=1* -1
+print g
+h=x*2+2
+print h
+j=h-27/9
+k=j-8/2
+m=k-4*(5+5+5)
+n=m+85
+
+if 1
+  x=3
+  if 1 c=4
+  end
+end
+if 1x=3 if 1c=4 end end
+
+if 1 > 2
+  x=3
+  if 1 c=4
+  end
+else
+  x=2
+end
+
+while 0
+  while a < 10
+    a = a + 1
+  end
+end
+
+until a == 0
+  a = a - 1
+  if -1
+    break
+  end
+end
+
+cc = c
+repeat
+  cc = cc * 2
+  if cc == 32
+    break
+  end
+end
+
+s=0
+for x = 1 to 5
+  s = s + x
+end
+
+do 10
+  a = a * a
+end
+
+xitcode=a-a
