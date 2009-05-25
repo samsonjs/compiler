@@ -1,50 +1,63 @@
+PLATFORM=$(shell uname -s)
+BINFORMAT="bin"
+ifeq ($(PLATFORM), Darwin)
+	BINFORMAT="macho"
+endif
+ifeq ($(PLATFORM), Linux)
+	BINFORMAT="elf"
+endif
+ifeq ($(BINFORMAT), bin)
+	@echo "WARNING: binary format is 'bin', this is probably not what you want!"
+	@echo "         Your platform, " $(PLATFORM) ", is unsupported."
+endif
+
 all: lt gt ge le eq neq if while until repeat for do break print
-	@echo -n
+	@true
 
 lt: test.rb test_lt.code
-	@./test.rb lt
+	@./test.rb lt $(BINFORMAT)
 
 gt: test.rb test_gt.code
-	@./test.rb gt
+	@./test.rb gt $(BINFORMAT)
 
 ge: test.rb test_ge.code
-	@./test.rb ge
+	@./test.rb ge $(BINFORMAT)
 
 le: test.rb test_le.code
-	@./test.rb le
+	@./test.rb le $(BINFORMAT)
 
 eq: test.rb test_eq.code
-	@./test.rb eq
+	@./test.rb eq $(BINFORMAT)
 
 neq: test.rb test_neq.code
-	@./test.rb neq
+	@./test.rb neq $(BINFORMAT)
 
 if: test.rb test_if.code
-	@./test.rb if
+	@./test.rb if $(BINFORMAT)
 
 while: test.rb test_while.code
-	@./test.rb while
+	@./test.rb while $(BINFORMAT)
 
 until: test.rb test_until.code
-	@./test.rb until
+	@./test.rb until $(BINFORMAT)
 
 repeat: test.rb test_repeat.code
-	@./test.rb repeat
+	@./test.rb repeat $(BINFORMAT)
 
 for: test.rb test_for.code
-	@./test.rb for
+	@./test.rb for $(BINFORMAT)
 
 do: test.rb test_do.code
-	@./test.rb do
+	@./test.rb do $(BINFORMAT)
 
 break: test.rb test_break.code
-	@./test.rb break
+	@./test.rb break $(BINFORMAT)
 
 print: test.rb test_print.code
-	@./test.rb print
+	@./test.rb print $(BINFORMAT)
 
 big_test: test.rb big_test.code
-	@./test.rb big
+	@./test.rb big $(BINFORMAT)
 
 clean:
 	@rm -f test*.asm test*.o

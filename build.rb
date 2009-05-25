@@ -1,14 +1,8 @@
 #!/usr/bin/env ruby
 
-ROOT = __FILE__.sub(/\/build\.rb$/, '') unless defined? ROOT
-
 require 'compiler'
-
-
-X86_exit = [0x89, 0xc3,         # mov ebx, eax (exit code)
-            0xb8, 1, 0, 0, 0,   # mov eax, 1
-            0xcd, 0x80          # int 0x80
-           ].pack('c*')
+require 'asm/text'
+require 'asm/binary'
 
 def main
   filename = ARGV[0].to_s
@@ -23,39 +17,21 @@ def base(filename)
   filename.sub(/\.[^.]*$/, '')
 end
 
-def interpolate(templatefile, data)
-  template = File.read(templatefile)
-  data.inject(template) do |template, mapping|
-    token, replacement = *mapping
-    template.sub("{#{token}}", replacement)
-  end
-end
 
 # filename: input filename
-# format:   output format, nasm or binary
+# asm:      assembler to use
 # returns:  output filename
-def compile(filename, format='asm')
+def compile(filename, asm, binformat='elf')
 
-  # compile to asm or binary
-  output = nil
   File.open(filename, 'r') do |input|
-    compiler = Compiler.new(input, format)
-    output = compiler.compile
+    compiler = Compiler.new(input, asm, binformat)
+    compiler.compile
   end
-  if format == 'asm'
-    mode = 'w'
-    data, bss, code = *output
-    output = interpolate("#{ROOT}/template.asm",
-                         :data => data, :bss => bss, :code => code)
-  else
-    mode = 'wb'
-    output += X86_exit
-  end
-  outfile = "#{base(filename)}.#{format}"
-  File.open(outfile, mode) do |out|
-    if format == 'asm'
-      out.puts(output)
-    end
+
+  ext = asm.class.name.split('::').last[0,3].downcase == 'bin' ? 'bin' : 'asm'
+  outfile = "#{base(filename)}.#{ext}"
+  File.open(outfile, 'wb') do |out|
+    out.puts(asm.output)
   end
   return outfile
 
@@ -68,33 +44,47 @@ rescue ParseError => e
 end
 
 # assemble using nasm, return resulting filename.
-def asm(filename)
+def asm(filename, binformat='elf')
   f = base(filename)
   outfile = "#{f}.o"
-  output = `nasm -f elf -g -o #{outfile} #{filename}`
+  output = `nasm -f #{binformat} -g -o #{outfile} #{filename}`
   if $?.exitstatus != 0
-    raise "nasm failed: #{$?.exitstatus}", output
+    puts output
+    raise "nasm failed: #{$?.exitstatus}"
   end
   return outfile
 end
 
 # link with ld, return resulting filename.
-def link(filename)
+def link(filename, platform='linux')
   f = base(filename)
-  output = `ld -o #{f} #{filename}`
+  cmd, args = *case platform
+               when 'darwin': ['gcc', '-arch i386']
+               when 'linux': ['ld', '']
+               else
+                 raise "unsupported platform: #{platform}"
+               end
+  output = `#{cmd} #{args} -o #{f} #{filename}`
   if $?.exitstatus != 0
-    raise "ld failed: #{$?.exitstatus}", output
+    puts output
+    raise "ld failed: #{$?.exitstatus}"
   end
   `chmod +x #{f}`
   return f
 end
 
-def build(filename, format='asm')
-  if format == 'asm'
-    link( asm( compile(filename) ) )
-  else # binary
-    link( compile(filename, format='bin') )
-  end
+# TODO Use a dependency injection framework for the assembler, and
+#      other parts as things become more modular.
+def build(filename, platform='linux', format='asm', binformat='elf')
+  bin = if format == 'asm'
+          code = compile(filename, Assembler::Text.new(platform))
+          obj = asm( code, binformat )
+          link( obj, platform )
+        else # binary
+          obj = compile(filename, Assembler::Binary.new(platform), binformat)
+          link( obj, platform )
+        end
+  return bin
 end
 
 def run(filename)

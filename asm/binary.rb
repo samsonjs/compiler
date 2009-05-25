@@ -5,13 +5,18 @@
 # sjs
 # may 2009
 
+ROOT = __FILE__.sub(/\/asm\/binary\.rb$/, '') unless defined? ROOT
+$LOAD_PATH << ROOT unless $LOAD_PATH.include?(ROOT)
+
+require 'asm/asm'
+
 module Assembler
 
   # Define a method named `emit_byte` and one named `binary_size` and
   # include this module.  Calling the assembler methods will output
   # x86 machine code ... hopefully.  So far it's incomplete and
   # binaries just segfault.
-  class Binary
+  class Binary < AssemblerBase
 
     # This structure allows for x86 registers of all sizes.  The
     # number of the register is the index of the array in which it was
@@ -44,7 +49,72 @@ module Assembler
     MaxUnsigned = 2**MachineBits - 1
     SignedRange = MinSigned..MaxSigned
 
-    
+    X86_exit = {
+      'linux' => [0x89, 0xc3,        # mov ebx, eax (exit code)
+                 0xb8, 1, 0, 0, 0,   # mov eax, 1
+                 0xcd, 0x80          # int 0x80
+                ].pack('c*'),
+
+      'darwin' => [0x50,               # push eax (exit code)
+                   0xb8, 1, 0, 0, 0,   # mov eax, 1
+                   0xcd, 0x80          # int 0x80
+                  ].pack('c*')
+    }
+
+    def initialize(platform='linux', binformat='elf')
+      super
+      @binary = []                 # Byte array of machine code.
+      @platform = platform
+      @binformat = binformat
+      init_sections
+    end
+
+    def init_sections
+      case @platform
+
+      when 'linux'
+        raise "unsupported" unless @binformat == 'elf'
+        @header_size = 0x100                     # ELF, Linux
+        @text_offset = 0x08048000 + @header_size # Offset of text section in memory
+
+      when 'darwin'
+        raise "unsupported" unless @binformat == 'macho'
+        @header_size = 0x100                     # Mach-O, Darwin
+        @text_offset = 0x08048000 + @header_size # Offset of text section in memory
+      else
+        raise "unsupported platform: #{platform}"
+      end
+      @text_size = 0x02be00                    # Size of text section.
+      @data_offset = @text_offset + @text_size # Offset of data section.
+      @data_size = 0x4e00                      # Size of data section.
+      @bss_offset = @data_offset + @data_size  # Offset of bss section.
+      @bss_size = 0                            # Size of bss section.
+    end
+
+    def output
+      @binary.pack('c*') + X86_exit[@platform]
+    end
+
+    # Define a constant in the .data section.
+    def const(name, value)
+      raise "unimplemented!"
+    end
+
+    # Define a variable with the given name and size (in dwords).
+    def defvar(name, dwords=1)
+      unless var?(name)
+        @vars[name] = @bss_size
+        @bss_size += dwords
+      else
+        STDERR.puts "[warning] attempted to redefine #{name}"
+      end
+    end
+
+    def label(suffix=nil)
+      name = super
+      @labels[name] = bytes_written
+      return name
+    end
 
     # Count the bytes that were encoded in the given block.
     def asm
@@ -56,7 +126,18 @@ module Assembler
       # return the number of bytes written
       bytes_written - instruction_offset
     end
+    
+    def emit_byte(byte)
+      @binary << byte
+    end
 
+    def bytes_written
+      @binary.size
+    end
+
+    def emit_label(name=label)
+      @labels[name] = @binary.length
+    end
 
     def emit_dword(num)
       num_to_quad(num).each {|byte| emit_byte(byte)}
@@ -119,7 +200,7 @@ module Assembler
     end
 
     def regnum(op)
-      num = register?
+      num = register?(op)
       raise "not a register: #{op.inspect}" unless num
       num
     end
@@ -146,7 +227,7 @@ module Assembler
     #   3.  mov r/m32, reg32 (0x89, mod r/m, maybe sib)
     #   3a. mov memoffset32, eax (0xa3, disp32)
     #   4.  mov r/m32, immediate32 (0xc7, mod r/m, maybe sib, imm32)
-    def x86_mov(dest, src)
+    def mov(dest, src)
       dest = dest[6..-1] if dest.is_a?(String) && dest[0..5] == 'dword '
       src = src[6..-1] if src.is_a?(String) && src[0..5] == 'dword '
 
@@ -199,35 +280,35 @@ module Assembler
     end
 
 
-    def x86_add(dest, src)
+    def add(dest, src)
     end
 
-    def x86_sub(dest, src)
+    def sub(dest, src)
     end
 
-    def x86_imul(op)
+    def imul(op)
     end
 
-    def x86_idiv(op)
+    def idiv(op)
     end
 
-    def x86_inc(op)
+    def inc(op)
       asm do
         if register?(op)
           emit_byte(0x40 + regnum(op))
         elsif rm32?(op)
           emit_byte(0xff)
-          emit_modrm(...)
+#           emit_modrm(...)
         else
           raise "unsupported op #{op}, wanted r32 or r/m32"
         end
       end
     end
 
-    def x86_push(reg)
+    def push(reg)
     end
 
-    def x86_cmp(a, b)
+    def cmp(a, b)
     end
 
 

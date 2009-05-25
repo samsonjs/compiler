@@ -3,123 +3,166 @@
 # sjs
 # may 2009
 
+ROOT = __FILE__.sub(/\/asm\/text\.rb$/, '') unless defined? ROOT
+$LOAD_PATH << ROOT unless $LOAD_PATH.include?(ROOT)
+
+require 'asm/asm'
+
 module Assembler
 
-    # Define a method named `emit` and include this module.  Calling
-    # the assembler methods will output nasm-friendly x86 asm code,
-    # line by line.  This is dead easy and we can trust nasm to
-    # compile correct machine code, which is tricky.
-    module Text
+    # Assembler methods output nasm-friendly x86 asm code, line by
+    # line.  This is dead easy and we can trust nasm to compile
+    # correct machine code, which isn't trivial.
+    class Text < AssemblerBase
 
-      def self.included(other)
-        im = other.instance_methods
-        unless im.include?(:emit)
-          raise "#{self.name} requires the including class define the emit method"
+      def initialize(platform='linux')
+        super
+        @data = ''
+        @bss = ''
+        @code = ''
+        @templatefile = "#{ROOT}/template.#{platform}.asm"
+        raise "unsupported platform: #{platform}" unless File.readable?(@templatefile)
+      end
+
+      # Define a constant in the .data section.
+      def const(name, value)
+        @data << "#{name}\tequ  #{value}"
+      end
+
+      # Define a variable with the given name and size (in dwords).
+      def defvar(name, dwords=1)
+        unless var?(name)
+          @bss << "#{name}: resd #{dwords}\n"
+          @vars[name] = name
+        else
+          STDERR.puts "[warning] attempted to redefine #{name}"
         end
       end
 
-
-      def x86_mov(dest, src)
-        emit("mov #{dest}, #{src.is_a?(Numeric) ? "0x#{src.to_s(16)}" : src}")
+      # Emit a line of code wrapped between a tab and a newline.
+      def emit(code, options={})
+        tab = options.has_key?(:tab) ? options[:tab] : "\t"
+        @code << "#{tab}#{code}\n"
       end
 
-      def x86_movzx(dest, src)
+      def label(suffix=nil)
+        name = super
+        @labels[name] = name
+        return name
+      end
+
+      def output
+        File.read(@templatefile).
+          sub("{data}", @data).
+          sub("{bss}", @bss).
+          sub("{code}", @code)
+      end
+
+      def emit_label(name=label)
+        emit("#{name}:", :tab => nil)
+      end
+
+      def mov(dest, src)
+        emit("mov #{dest}, #{src}#{src.is_a?(Numeric) ? " ; 0x#{src.to_s(16)}" : ''}")
+      end
+
+      def movzx(dest, src)
         emit("movzx #{dest}, #{src}")
       end
 
-      def x86_add(dest, src)
+      def add(dest, src)
         emit("add #{dest}, #{src}")
       end
 
-      def x86_sub(dest, src)
+      def sub(dest, src)
         emit("sub #{dest}, #{src}")
       end
 
-      def x86_imul(op)
+      def imul(op)
         emit("imul #{op}")
       end
 
-      def x86_idiv(op)
+      def idiv(op)
         emit("idiv #{op}")
       end
 
-      def x86_inc(op)
+      def inc(op)
         emit("inc #{op}")
       end
 
-      def x86_dec(op)
+      def dec(op)
         emit("dec #{op}")
       end
 
-      def x86_push(reg)
+      def push(reg)
         emit("push #{reg}")
       end
 
-      def x86_pop(reg)
+      def pop(reg)
         emit("pop #{reg}")
       end
 
-      def x86_call(label)
+      def call(label)
         emit("call #{label}")
       end
 
-      def x86_neg(reg)
+      def neg(reg)
         emit("neg #{reg}")
       end
 
-      def x86_not(rm32)
+      def not(rm32)
         emit("not #{rm32}")
       end
 
-      def x86_xchg(op1, op2)
+      def xchg(op1, op2)
         emit("xchg #{op1}, #{op2}")
       end
 
-      def x86_and(op1, op2)
+      def and_(op1, op2)
         emit("and #{op1}, #{op2}")
       end
 
-      def x86_or(op1, op2)
+      def or(op1, op2)
         emit("or #{op1}, #{op2}")
       end
 
-      def x86_xor(op1, op2)
+      def xor(op1, op2)
         emit("xor #{op1}, #{op2}")
       end
 
-      def x86_jz(label)
+      def jz(label)
         emit("jz #{label}")
       end
 
-      def x86_jnz(label)
+      def jnz(label)
         emit("jnz #{label}")
       end
 
-      def x86_jmp(label)
+      def jmp(label)
         emit("jmp #{label}")
       end
 
-      def x86_jl(label)
+      def jl(label)
         emit("jl #{label}")
       end
 
-      def x86_cmp(a, b)
+      def cmp(a, b)
         emit("cmp #{a}, #{b}")
       end
 
-      def x86_lea(a, b)
+      def lea(a, b)
         emit("lea #{a}, #{b}")
       end
 
-      def x86_shr(a, b)
+      def shr(a, b)
         emit("shr #{a}, #{b}")
       end
 
-      def x86_loop(label)
+      def loop_(label)
         emit("loop #{label}")
       end
 
-      def x86_int(num)
+      def int(num)
         emit("int 0x#{num.to_s(16)}")
       end
 
