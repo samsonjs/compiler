@@ -1,3 +1,4 @@
+BITS 32
 GLOBAL _start
 SECTION .data
 {data}

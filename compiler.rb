@@ -13,6 +13,7 @@
 # require 'unroller'
 
 require 'asm'
+require 'opcode'
 
 class ParseError < StandardError
   attr_reader :caller, :context
@@ -23,37 +24,58 @@ class ParseError < StandardError
 end
 
 class Compiler
-  # This module uses our `emit` method to output x86 code for nasm.
-  include Assembler::X86
-
-  attr_reader :data, :bss, :code
+  # This module uses our `emit_byte` method to output x86 machine code
+  # directly using the assembler library.
+  # include Assembler::Binary
 
   Keywords = %w[
     if else end while until repeat for to do break
     print
   ]
   
-  def initialize(input=STDIN)
-    @look = ''                   # lookahead char
-    @token = nil                 # type of last read token
-    @value = nil                 # value of last read token
-    @input = input               # stream to read from
-    @data = ''                   # data section
-    @bss = ''                    # bss section
-    @code = ''                   # code section
-    @vars = {}                   # defined variables
-    @num_labels = 0              # used to generate unique labels
-    @num_labels_with_suffix = Hash.new(0)
+  attr_reader :data, :bss, :code
+
+  def initialize(input, asm=Assembler::Text.new)
+    # XXX for development only!
     @indent = 0                  # for pretty printing
+
+    @look = ''                   # Next lookahead char.
+    @token = nil                 # Type of last read token.
+    @value = nil                 # Value of last read token.
+    @input = input               # Stream to read from.
+    @data = ''                   # Data section.
+    @bss = ''                    # BSS section.
+    @code = ''                   # Code section.
+    @binary = []                 # Byte array of machine code.
+    @vars = {}                   # Symbol table, maps names to locations in BSS.
+    @num_labels = 0              # Used to generate unique labels.
+    @num_labels_with_suffix = Hash.new(0)
+
+    @header_size = 0x100                     # ELF, Linux, x86
+    @text_offset = 0x08048000 + @header_size # Offset of text section in memory (Linux, x86).
+    @text_size = 0x02be00                    # Size of text section.
+    @data_offset = @text_offset + @text_size # Offset of data section.
+    @data_size = 0x4e00                      # Size of data section.
+    @bss_offset = @data_offset + @data_size  # Offset of bss section.
+    @bss_size = 0                            # Size of bss section.
+
+    # Labels for the assembler.  Maps names to locations.
+    @labels = Hash.new {|h, key| raise "undefined label: #{key}"}
+
+    @asm = asm
 
     # seed the lexer
     get_char
   end
 
+  def asm
+    @asm
+  end
+
   def compile
     block
     expected(:'end of file') unless eof?
-    [@data, @bss, @code]
+    asm.output
   end
 
   # Scan the input stream for the next token.
@@ -790,7 +812,8 @@ class Compiler
   def defvar(name, dwords=1)
     unless var?(name)
       @bss << "#{name}: resd #{dwords}\n"
-      @vars[name] = name
+      @vars[name] = @bss_size
+      @bss_size += dwords
     else
       STDERR.puts "[warning] attempted to redefine #{name}"
     end
@@ -804,14 +827,30 @@ class Compiler
     @vars[name]
   end
 
-  # Emit a line of code wrapped between a tab and a newline.
+  # Emit a line of code wrapped between a tab and a newline.  Required
+  # by Assembler::Text.
   def emit(code, options={})
     tab = options.has_key?(:tab) ? options[:tab] : "\t"
     @code << "#{tab}#{code}\n"
   end
 
+  # emit_byte and bytes_written are required by Assembler::Binary.
+  def emit_byte(byte)
+    @binary << byte
+  end
+  def bytes_written
+    @binary.size
+  end
+
+
   def emit_label(name=unique_label)
     emit("#{name}:", :tab => nil)
+
+    @labels[name] = @binary.length
+  end
+
+  def resolve_label(label)
+    @labels[label]
   end
 
   # Generate a unique label.
@@ -832,6 +871,12 @@ class Compiler
                   end
     ' ' * (real_indent * 4)
   end
+
+  # Pack the array into a byte string.
+  def binary
+    @binary.pack('c*')
+  end
+
 
   def pushing(reg)
     x86_push(reg)

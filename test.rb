@@ -1,0 +1,47 @@
+require 'compiler'
+require 'stringio'
+
+X86_exit = [0x89, 0xc3,         # mov ebx, eax (exit code)
+            0xb8, 1, 0, 0, 0,   # mov eax, 1
+            0xcd, 0x80          # int 0x80
+           ].pack('c*')
+
+def error(msg) STDERR.puts(msg) end
+
+def parse(input)
+  compiler = Compiler.new(input)
+  compiler.parse                # tuple of [data, bss, code, binary]
+
+rescue ParseError => e
+  error("[error] #{e.message}")
+  error("[context] #{e.context}")
+  # error("Aborting!")
+  error(e.caller)
+  exit(1)
+end
+
+def interpolate(template, data)
+  data.inject(template) do |template, mapping|
+    token, replacement = *mapping
+    template.sub("{#{token}}", replacement)
+  end
+end
+
+def main(arg)
+  input = if File.readable?(arg)
+            File.open(arg)
+          else
+            # StringIO.new("5*(3-5)*2+2-9/3-8/2-4*(5+5+5)\n")
+            StringIO.new("abc=999\nabc-888\n")
+          end
+  data, bss, code, binary = *parse(input)
+  template = File.read("template.asm")
+  asm = interpolate(template, :data => data, :bss => bss, :code => code)
+  File.open("test.asm", "w") { |f| f.puts(asm) }
+  File.open("test.bin", "wb") { |f|
+    f.write(binary)
+    f.write(X86_exit)
+  }
+end
+
+main(ARGV[0].to_s)

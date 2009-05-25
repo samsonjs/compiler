@@ -4,6 +4,12 @@ ROOT = __FILE__.sub(/\/build\.rb$/, '') unless defined? ROOT
 
 require 'compiler'
 
+
+X86_exit = [0x89, 0xc3,         # mov ebx, eax (exit code)
+            0xb8, 1, 0, 0, 0,   # mov eax, 1
+            0xcd, 0x80          # int 0x80
+           ].pack('c*')
+
 def main
   filename = ARGV[0].to_s
   raise "can't read #{filename}" unless File.readable?(filename)    
@@ -25,18 +31,32 @@ def interpolate(templatefile, data)
   end
 end
 
-# input: filename
-# output: filename
-def compile(filename)
-  data, bss, code = nil
+# filename: input filename
+# format:   output format, nasm or binary
+# returns:  output filename
+def compile(filename, format='asm')
+
+  # compile to asm or binary
+  output = nil
   File.open(filename, 'r') do |input|
-    compiler = Compiler.new(input)
-    data, bss, code = compiler.compile
+    compiler = Compiler.new(input, format)
+    output = compiler.compile
   end
-  asm = interpolate("#{ROOT}/template.asm",
-                    :data => data, :bss => bss, :code => code)
-  outfile = "#{base(filename)}.asm"
-  File.open(outfile, 'w') { |out| out.puts(asm) }
+  if format == 'asm'
+    mode = 'w'
+    data, bss, code = *output
+    output = interpolate("#{ROOT}/template.asm",
+                         :data => data, :bss => bss, :code => code)
+  else
+    mode = 'wb'
+    output += X86_exit
+  end
+  outfile = "#{base(filename)}.#{format}"
+  File.open(outfile, mode) do |out|
+    if format == 'asm'
+      out.puts(output)
+    end
+  end
   return outfile
 
 rescue ParseError => e
@@ -69,8 +89,12 @@ def link(filename)
   return f
 end
 
-def build(filename)
-  link( asm( compile(filename) ) )
+def build(filename, format='asm')
+  if format == 'asm'
+    link( asm( compile(filename) ) )
+  else # binary
+    link( compile(filename, format='bin') )
+  end
 end
 
 def run(filename)

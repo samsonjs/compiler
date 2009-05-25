@@ -15,3 +15,17 @@ test/test_do
 test/test_for
 test/test_break
 test/test_print
+
+*.o
+test.asm
+elfwriter
+lea
+min
+min.bin
+min_elf
+mov
+show_elf_magic
+test.bin
+test_elf.bin
+test_elf
+min2
