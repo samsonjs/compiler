@@ -21,10 +21,10 @@ end
 # filename: input filename
 # asm:      assembler to use
 # returns:  output filename
-def compile(filename, asm, binformat='elf')
+def compile(filename, asm)
 
   File.open(filename, 'r') do |input|
-    compiler = Compiler.new(input, asm, binformat)
+    compiler = Compiler.new(input, asm)
     compiler.compile
   end
 
@@ -81,7 +81,7 @@ def build(filename, platform='linux', format='asm', binformat='elf')
           obj = asm( code, binformat )
           link( obj, platform )
         else # binary
-          obj = compile(filename, Assembler::Binary.new(platform), binformat)
+          obj = compile(filename, Assembler::Binary.new(platform))
           link( obj, platform )
         end
   return bin

@@ -12,7 +12,10 @@ module Assembler
   # implemented to be useful.
   class AssemblerBase
 
-    def initialize(*args)
+    attr_reader :platform
+
+    def initialize(platform='linux', *args)
+      @platform = platform
       @vars = {}                   # Symbol table, maps names to locations in BSS.
       @num_labels = 0              # Used to generate unique labels.
       @num_labels_with_suffix = Hash.new(0)

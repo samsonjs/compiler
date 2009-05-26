@@ -29,14 +29,9 @@ class Compiler
   
   attr_reader :asm
 
-  def initialize(input, asm, binformat='elf')
+  def initialize(input, asm)
     # XXX for development only!
     @indent = 0                  # for pretty printing
-
-    # The only binary format our assembler knows right now is ELF.
-    unless binformat == 'elf'
-      raise "Only ELF is supported.  Unsupported binary format: #{binformat}."
-    end
 
     @look = ''                   # Next lookahead char.
     @token = nil                 # Type of last read token.
@@ -604,11 +599,36 @@ class Compiler
       dec(:edi)
       shr(:eax, 8)
       loop_(loop_label)
-      mov(:eax, 4)            # SYS_write
-      mov(:ebx, 1)            # STDOUT
-      lea(:ecx, '[HEX]')
-      mov(:edx, 11)           # excluding term, max # of chars to print
-      int(0x80)
+      # write(int fd, char *s, int n)
+      mov(:eax, 4)              # SYS_write
+      lea(:ecx, '[HEX]')        # ecx = &s
+      args = [1,                # fd = 1 (STDOUT)
+              :ecx,             # s = &s
+              11]               # n = 11 (excluding term, max # of chars to print)
+      case platform
+      when 'darwin'             # on the stack, right to left (right @ highest addr)
+        ####
+        # setup bogus stack frame
+        push(:ebp)
+        mov(:ebp, :esp)
+        sub(:esp, 36)
+        ####
+        args.reverse.each { |a| push(a) }
+        push(:eax)
+        int(0x80)
+        ####
+        # teardown bogus stack frame
+        xor(:eax, :eax)
+        add(:esp, 36)
+        pop(:ebx)
+        emit("leave")
+        ####
+      when 'linux'
+        mov(:ebx, args[0])
+        mov(:ecx, args[1])
+        mov(:edx, args[2])
+        int(0x80)
+      end
     end
   end
 
