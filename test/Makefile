@@ -56,7 +56,7 @@ break: test.rb test_break.code
 print: test.rb test_print.code
 	@./test.rb print $(BINFORMAT)
 
-big_test: test.rb big_test.code
+big_test: test.rb test_big.code
 	@./test.rb big $(BINFORMAT)
 
 clean:

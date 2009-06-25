@@ -5,20 +5,20 @@ $LOAD_PATH << ROOT
 
 require 'build'
 
-# usage: build.rb <func> [binformat]
-#
-# ([format] will go before [binformat])
+# usage: test.rb <func> [binformat] [format]
 
 def main
   func = ARGV[0].to_s
-  format = 'asm'                # 'bin' only assembles one or two
-                                # instructions right now, but support
-                                # is in place
-  binformat = (ARGV[1] ? ARGV[1] : 'elf').downcase
+  binformat = ARGV[1] ? ARGV[1].downcase : 'elf'
+  format = ARGV[2] ? ARGV[2].downcase : 'asm'
   platform = `uname -s`.chomp.downcase
   print "testing #{func} ... "
-  success = run( build("test_#{func}.code", platform, format, binformat) )
-  puts success == 0 ? "pass" : "FAIL! (#{success})"
+  success = run( build("test_#{func}.code", platform, binformat) )
+  if success == 0
+    puts "pass"
+  else
+    puts "FAIL! (#{success})"
+  end
   exit(success.to_i)
 end
 

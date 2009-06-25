@@ -3,9 +3,6 @@
 # sjs
 # may 2009
 
-ROOT = __FILE__.sub(/\/asm\/text\.rb$/, '') unless defined? ROOT
-$LOAD_PATH << ROOT unless $LOAD_PATH.include?(ROOT)
-
 require 'asm/asm'
 
 module Assembler
@@ -15,8 +12,9 @@ module Assembler
     # correct machine code, which isn't trivial.
     class Text < AssemblerBase
 
-      def initialize(platform='linux')
+      def initialize(platform)
         super
+        @vars = {}                   # Symbol table, maps names to locations in BSS.
         @data = ''
         @bss = ''
         @code = ''
@@ -38,6 +36,13 @@ module Assembler
           STDERR.puts "[warning] attempted to redefine #{name}"
         end
       end
+
+
+      def var(name)
+        @vars[name]
+      end
+      alias_method :var?, :var
+
 
       # Emit a line of code wrapped between a tab and a newline.
       def emit(code, options={})
@@ -106,6 +111,10 @@ module Assembler
         emit("call #{label}")
       end
 
+      def leave
+        emit("leave")
+      end
+
       def neg(reg)
         emit("neg #{reg}")
       end
@@ -164,6 +173,10 @@ module Assembler
 
       def int(num)
         emit("int 0x#{num.to_s(16)}")
+      end
+      
+      def cdq
+        emit("cdq")
       end
 
     end

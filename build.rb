@@ -3,10 +3,21 @@
 require 'compiler'
 require 'asm/text'
 require 'asm/binary'
+require 'asm/machosymtab'
+require 'asm/machofile'
+
+# usage: build.rb <filename> [elf | macho ] [asm | bin]
 
 def main
   filename = ARGV[0].to_s
-  raise "can't read #{filename}" unless File.readable?(filename)    
+  raise "can't read #{filename}" unless File.readable?(filename)
+  binformat = ARGV[1] ? ARGV[1].downcase : 'elf'
+  format = ARGV[2] ? ARGV[2].downcase : 'asm'
+  platform = `uname -s`.chomp.downcase
+  puts "Building #{format} from #{filename} for #{platform}, binformat is #{binformat} ..."
+  outfile = build(filename, platform, format, binformat)
+  puts outfile
+  exit
 end
 
 
@@ -18,22 +29,17 @@ def base(filename)
 end
 
 
-# filename: input filename
+# infile:   input filename
+# outfile:  output filename
 # asm:      assembler to use
-# returns:  output filename
-def compile(filename, asm)
+def compile(infile, outfile, asm)
 
-  File.open(filename, 'r') do |input|
-    compiler = Compiler.new(input, asm)
-    compiler.compile
+  File.open(infile, 'r') do |input|
+    File.open(outfile, 'wb') do |out|
+      compiler = Compiler.new(input, asm)
+      out.print(compiler.compile)
+    end
   end
-
-  ext = asm.class.name.split('::').last[0,3].downcase == 'bin' ? 'bin' : 'asm'
-  outfile = "#{base(filename)}.#{ext}"
-  File.open(outfile, 'wb') do |out|
-    out.puts(asm.output)
-  end
-  return outfile
 
 rescue ParseError => e
   error("[error] #{e.message}")
@@ -44,12 +50,13 @@ rescue ParseError => e
 end
 
 # assemble using nasm, return resulting filename.
-def asm(filename, binformat='elf')
+def assemble(filename, binformat='elf')
   f = base(filename)
   outfile = "#{f}.o"
-  output = `nasm -f #{binformat} -g -o #{outfile} #{filename}`
+  output = `nasm -f #{binformat} -g -o #{outfile} #{filename} 2>&1`
   if $?.exitstatus != 0
-    puts output
+    puts
+    print output
     raise "nasm failed: #{$?.exitstatus}"
   end
   return outfile
@@ -64,32 +71,41 @@ def link(filename, platform='linux')
                else
                  raise "unsupported platform: #{platform}"
                end
-  output = `#{cmd} #{args} -o #{f} #{filename}`
+  output = `#{cmd} #{args} -o #{f} #{filename} 2>&1`
   if $?.exitstatus != 0
-    puts output
+    puts
+    print output
     raise "ld failed: #{$?.exitstatus}"
   end
-  `chmod +x #{f}`
+  `chmod u+x #{f}`
   return f
 end
 
-# TODO Use a dependency injection framework for the assembler, and
-#      other parts as things become more modular.
-def build(filename, platform='linux', format='asm', binformat='elf')
-  bin = if format == 'asm'
-          code = compile(filename, Assembler::Text.new(platform))
-          obj = asm( code, binformat )
-          link( obj, platform )
-        else # binary
-          obj = compile(filename, Assembler::Binary.new(platform))
-          link( obj, platform )
-        end
-  return bin
+def build(filename, platform='linux', binformat='elf')
+  objfile = base(filename) + '.o'
+  symtab, objwriter =
+    case binformat
+    when 'elf':   [Assembler::ELFSymtab.new, Assembler::ELFFile.new]
+    when 'macho': [Assembler::MachOSymtab.new, Assembler::MachOFile.new]
+    else
+      raise "unsupported binary format: #{binformat}"
+    end
+  compile(filename, objfile, Assembler::Binary.new(platform, symtab, objwriter))
+  exefile = link(objfile, platform)
+  return exefile
+end
+
+def build_asm(filename, platform='linux', binformat='elf')
+  asmfile = base(filename) + '.asm'
+  compile(filename, asmfile, Assembler::Text.new(platform))
+  objfile = assemble(asmfile, binformat)
+  exefile = link(objfile, platform)
+  return exefile
 end
 
 def run(filename)
   filename = "./#{filename}" unless filename.include?('/')
-  system(filename)
+  `#{filename}`
   return $?.exitstatus
 end
 

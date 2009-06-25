@@ -12,6 +12,8 @@
 # require 'rubygems'
 # require 'unroller'
 
+require 'asm/registers'
+
 class ParseError < StandardError
   attr_reader :caller, :context
   def initialize(caller, context=nil)
@@ -21,6 +23,8 @@ class ParseError < StandardError
 end
 
 class Compiler
+
+  include Assembler::Registers
 
   Keywords = %w[
     if else end while until repeat for to do break
@@ -82,7 +86,7 @@ class Compiler
       asm.call(name)
     else
       # variable access
-      asm.mov(:eax, "dword [#{name}]")
+      asm.mov(EAX, [asm.var(name)])
     end
   end
 
@@ -95,7 +99,7 @@ class Compiler
     elsif alpha?(@look)
       identifier                # or call
     elsif digit?(@look)
-      asm.mov(:eax, get_number.to_i)
+      asm.mov(EAX, get_number.to_i)
     else
       expected(:'integer, identifier, function call, or parenthesized expression', :got => @look)
     end
@@ -106,7 +110,7 @@ class Compiler
     sign = @look
     match(sign) if op?(:unary, sign)
     factor
-    asm.neg(:eax) if sign == '-'
+    asm.neg(EAX) if sign == '-'
   end
 
   # Parse and translate a single term (factor or mulop).  Result is in
@@ -115,11 +119,10 @@ class Compiler
     signed_factor                      # Result in eax.
 
     while op?(:mul, @look)
-      pushing(:eax) do
-        case @look
-        when '*': multiply
-        when '/': divide
-        end
+      asm.push(EAX)
+      case @look
+      when '*': multiply
+      when '/': divide
       end
     end
   end
@@ -130,11 +133,10 @@ class Compiler
     term                      # Result is in eax.
 
     while op_char?(@look, :add)
-      pushing(:eax) do
-        case @look
-        when '+': add
-        when '-': subtract
-        end
+      asm.push(EAX)
+      case @look
+      when '+': add
+      when '-': subtract
       end
     end
   end
@@ -144,7 +146,8 @@ class Compiler
   def add
     match('+')
     term                        # Result is in eax.
-    asm.add(:eax, '[esp]')         # Add a to b.
+    asm.pop(EBX)
+    asm.add(EAX, EBX)         # Add a to b.
   end
 
   # Parse a subtraction operator and the 2nd term (b).  The result is
@@ -152,8 +155,9 @@ class Compiler
   def subtract
     match('-')
     term                      # Result, b, is in eax.
-    asm.neg(:eax)             # Fake the subtraction.  a - b == a + -b
-    asm.add(:eax, '[esp]')    # Add a and -b.
+    asm.pop(EBX)
+    asm.neg(EAX)              # Fake the subtraction.  a - b == a + -b
+    asm.add(EAX, EBX)         # Add a(ebx) to -b(eax).
   end
 
   # Parse an addition operator and the 2nd term (b).  The result is
@@ -161,7 +165,8 @@ class Compiler
   def multiply
     match('*')
     signed_factor               # Result is in eax.
-    asm.imul('dword [esp]')     # Multiply a by b.
+    asm.pop(EBX)
+    asm.imul(EBX)             # Multiply a by b.
   end
 
   # Parse a division operator and the divisor (b).  The result is
@@ -169,14 +174,15 @@ class Compiler
   def divide
     match('/')
     signed_factor               # Result is in eax.
-    asm.xchg(:eax, '[esp]')     # Swap the divisor and dividend into
+    asm.pop(EBX)
+    asm.xchg(EAX, EBX)          # Swap the divisor and dividend into
                                 # the correct places.
 
     # idiv uses edx:eax as the dividend so we need to ensure that edx
     # is correctly sign-extended w.r.t. eax.
     asm.cdq              # Sign-extend eax into edx (Convert Double to
                          # Quad).
-    asm.idiv('dword [esp]')     # Divide a (eax) by b ([esp]).
+    asm.idiv(EBX)        # Divide a (eax) by b (ebx).
   end
 
 
@@ -187,19 +193,22 @@ class Compiler
   def bitor_expr
     match('|')
     term
-    asm.or(:eax, '[esp]')
+    asm.pop(EBX)
+    asm.or_(EAX, EBX)
   end
 
   def bitand_expr
     match('&')
     signed_factor
-    asm.and_(:eax, '[esp]')
+    asm.pop(EBX)
+    asm.and_(EAX, EBX)
   end
 
   def xor_expr
     match('^')
     term
-    asm.xor(:eax, '[esp]')
+    asm.pop(EBX)
+    asm.xor(EAX, EBX)
   end
 
 
@@ -232,9 +241,9 @@ class Compiler
   def boolean_factor
     if boolean?(@look)
       if get_boolean == 'true'
-        asm.mov(:eax, -1)
+        asm.mov(EAX, -1)
       else
-        asm.xor(:eax, :eax)
+        asm.xor(EAX, EAX)
       end
       scan
     else
@@ -246,8 +255,8 @@ class Compiler
     if @look == '!'
       match('!')
       boolean_factor
-      make_boolean(:eax)        # ensure it is -1 or 0...
-      asm.not(:eax)             # so that not is also boolean not
+      make_boolean(EAX)        # ensure it is -1 or 0...
+      asm.not_(EAX)            # so that 1's complement NOT is also boolean not
     else
       boolean_factor
     end
@@ -255,8 +264,8 @@ class Compiler
 
   # Convert any identifier to a boolean (-1 or 0).  This is
   # semantically equivalent to !!reg in C or Ruby.
-  def make_boolean(reg=:eax)
-    end_label = asm.label(:endmakebool)
+  def make_boolean(reg=EAX)
+    end_label = asm.mklabel(:endmakebool)
     asm.cmp(reg, 0)             # if false do nothing
     asm.jz(end_label)
     asm.mov(reg, -1)            # truthy, make it true
@@ -267,20 +276,19 @@ class Compiler
     expression
     if op_char?(@look, :rel)
       scan
-      pushing(:eax) do
-        case @value
-        when '==': eq_relation
-        when '!=': neq_relation
-        when '>': gt_relation
-        when '>=': ge_relation
-        when '<': lt_relation
-        when '<=': le_relation
-        end
+      asm.push(EAX)
+      case @value
+      when '==': eq_relation
+      when '!=': neq_relation
+      when '>': gt_relation
+      when '>=': ge_relation
+      when '<': lt_relation
+      when '<=': le_relation
       end
     end
   end
 
-  # a: [esp]
+  # a: <on the stack>
   # b: eax
   # 
   # If b - a is zero then a = b, and make_boolean will leave the zero
@@ -288,14 +296,15 @@ class Compiler
   # and make_boolean will leave -1 (true) for us in eax.
   def neq_relation
     expression
-    asm.sub(:eax, '[esp]')
+    asm.pop(EBX)
+    asm.sub(EAX, EBX)
     make_boolean
   end
 
   # Invert the != test for equal.
   def eq_relation
     neq_relation
-    asm.not(:eax)
+    asm.not_(EAX)
   end
 
   # > and < are both implemented in terms of jl (jump if less than).
@@ -303,7 +312,13 @@ class Compiler
   # and order the terms appropriately for each function.  As for >=
   # and <=, they in turn are implemented in terms of > and <.  a is
   # greater than or equal to b if and only if a is *not* less than b.
-
+  #
+  # Note: This was done to minimize the number of instructions that
+  #       the assembler needed to implement, but since the Jcc
+  #       instructions are very cheap to implement this is no longer
+  #       a concern.
+  
+  
   # The next 4 relations all compare 2 values a and b, then return
   # true (-1) if the difference was below zero and false (0)
   # otherwise (using JL, jump if less than).
@@ -311,58 +326,62 @@ class Compiler
     # Invert the sense of the test?
     invert = options[:invert]
 
-    true_label = asm.label(:cmp)
-    end_label = asm.label(:endcmp)
+    true_label = asm.mklabel(:cmp)
+    end_label = asm.mklabel(:endcmp)
     asm.cmp(a, b)
     asm.jl(true_label)
 
-    asm.xor(:eax, :eax)         # return false
-    asm.not(:eax) if invert     # (or true if inverted)
+    asm.xor(EAX, EAX)          # return false
+    asm.not_(EAX) if invert    # (or true if inverted)
     asm.jmp(end_label)
 
     asm.emit_label(true_label)
-    asm.xor(:eax, :eax)          # return true
-    asm.not(:eax) unless invert  # (or false if inverted)
+    asm.xor(EAX, EAX)            # return true
+    asm.not_(EAX) unless invert  # (or false if inverted)
 
     asm.emit_label(end_label)
   end
 
-  # a: [esp]
+  # a: <on the stack>
   # b: eax
   #
   # if a > b then b - a < 0
   def gt_relation
     expression
-    cmp_relation(:eax, '[esp]') # b - a
+    asm.pop(EBX)
+    cmp_relation(EAX, EBX) # b - a
   end
 
-  # a: [esp]
+  # a: <on the stack>
   # b: eax
   #
   # if a < b then a - b < 0
   def lt_relation
     expression
-    cmp_relation('[esp]', :eax) # a - b
+    asm.pop(EBX)
+    cmp_relation(EBX, EAX) # a - b
   end
 
-  # a: [esp]
+  # a: <on the stack>
   # b: eax
   #
   # if a >= b then !(a < b)
   def ge_relation
     expression
+    asm.pop(EBX)
     # Compare them as in less than but invert the result.
-    cmp_relation('[esp]', :eax, :invert => true)
+    cmp_relation(EBX, EAX, :invert => true)
   end
 
-  # a: [esp]
+  # a: <on the stack>
   # b: eax
   # 
   # if a <= b then !(a > b)
   def le_relation
     expression
+    asm.pop(EBX)
     # Compare them as in greater than but invert the result.
-    cmp_relation(:eax, '[esp]', :invert => true)
+    cmp_relation(EAX, EBX, :invert => true)
   end
 
 
@@ -376,7 +395,7 @@ class Compiler
     match('=')
     boolean_expression
     asm.defvar(name) unless asm.var?(name)
-    asm.mov("dword [#{name}]", :eax)
+    asm.mov([asm.var(name)], EAX)
   end
 
   # Parse a code block.
@@ -413,7 +432,7 @@ class Compiler
   
   # Parse an if-else statement.
   def if_else_stmt(label)
-    else_label = asm.label(:end_or_else)
+    else_label = asm.mklabel(:end_or_else)
     end_label = else_label      # only generated if else clause
                                 # present
     condition
@@ -424,7 +443,7 @@ class Compiler
     @indent -= 1
     if @token == :keyword && @value == 'else'
       skip_any_whitespace
-      end_label = asm.label(:endif) # now we need the 2nd label
+      end_label = asm.mklabel(:endif) # now we need the 2nd label
       asm.jmp(end_label)
       asm.emit_label(else_label)
       @indent += 1
@@ -441,8 +460,8 @@ class Compiler
   # block: Code to execute at the start of each iteration. (e.g. a
   #        condition)
   def simple_loop(name)
-    start_label = asm.label(:"loop_#{name}")
-    end_label = asm.label(:"end_#{name}")
+    start_label = asm.mklabel(:"#{name}_loop")
+    end_label = asm.mklabel(:"end_#{name}")
     asm.emit_label(start_label)
 
     yield(end_label)
@@ -482,27 +501,29 @@ class Compiler
   #   s = s + x
   # e
   def for_stmt
-    counter = "[#{get_name}]"
+    counter = get_name
+    asm.defvar(counter)
     match('=')
-    boolean_expression          # initial value
-    asm.sub(:eax, 1)            # pre-decrement because of the
-                                # following pre-increment
-    asm.mov(counter, :eax)      # stash the counter in memory
+    boolean_expression                 # initial value
+    asm.sub(EAX, 1)                    # pre-decrement because of the
+                                       # following pre-increment
+    asm.mov([asm.var(counter)], EAX)   # stash the counter in memory
     match_word('to', :scan => true)
-    boolean_expression          # final value
+    boolean_expression                 # final value
     skip_any_whitespace
-    asm.push(:eax)              # stash final value on stack
-    final = '[esp]'
+    asm.push(EAX)                      # stash final value on stack
+    asm.mov(EDX, ESP)
+    final = [EDX]
 
     simple_loop('for') do |end_label|
-      asm.mov(:ecx, counter)      # get the counter
-      asm.add(:ecx, 1)            # increment
-      asm.mov(counter, :ecx)      # store the counter
-      asm.cmp(final, :ecx)        # check if we're done
-      asm.jz(end_label)           # if so jump to the end
+      asm.mov(ECX, [asm.var(counter)]) # get the counter
+      asm.add(ECX, 1)                  # increment
+      asm.mov([asm.var(counter)], ECX) # store the counter
+      asm.cmp(final, ECX)              # check if we're done
+      asm.jz(end_label)                # if so jump to the end
     end
 
-    asm.add(:esp, 4)            # clean up the stack
+    asm.add(ESP, 4)                    # clean up the stack
   end
 
   # do 5
@@ -512,19 +533,19 @@ class Compiler
 
     boolean_expression
     skip_any_whitespace
-    asm.mov(:ecx, :eax)
+    asm.mov(ECX, EAX)
 
-    start_label = asm.label(:do)
-    end_label = asm.label(:enddo)
+    start_label = asm.mklabel(:do)
+    end_label = asm.mklabel(:enddo)
     asm.emit_label(start_label)
 
-    asm.push(:ecx)
+    asm.push(ECX)
 
     @indent += 1
     block(end_label)
     @indent -= 1
 
-    asm.pop(:ecx)
+    asm.pop(ECX)
 
     match_word('end')
     asm.loop_(start_label)
@@ -532,13 +553,13 @@ class Compiler
     # Phony push!  break needs to clean up the stack, but since we
     # don't know if there is a break at this point we fake a push and
     # always clean up the stack after.
-    asm.sub(:esp, 4)
+    asm.sub(ESP, 4)
 
     asm.emit_label(end_label)
 
     # If there was a break we have to clean up the stack here.  If
     # there was no break we clean up the phony push above.
-    asm.add(:esp, 4)
+    asm.add(ESP, 4)
   end
 
   def break_stmt(label)
@@ -554,79 +575,83 @@ class Compiler
   def condition
     boolean_expression
     skip_whitespace
-    asm.cmp(:eax, 0)            # 0 is false, anything else is true
+    asm.cmp(EAX, 0)            # 0 is false, anything else is true
   end
 
   # print eax in hex format
   def print_stmt
+    # variable names
+    d = 'DIGITS'
+    h = 'HEX'
+    
     asm.block do
       # define a lookup table of digits
-      unless var?('DIGITS')
-        defvar('DIGITS', 4)
-        mov('dword [DIGITS]',    0x33323130)
-        mov('dword [DIGITS+4]',  0x37363534)
-        mov('dword [DIGITS+8]',  0x62613938)
-        mov('dword [DIGITS+12]', 0x66656463)
+      unless var?(d)
+        defvar(d, 4)
+        mov([var(d)],    0x33323130)
+        mov([var(d)+4],  0x37363534)
+        mov([var(d)+8],  0x62613938)
+        mov([var(d)+12], 0x66656463)
       end
       # 3 dwords == 12 chars
-      defvar('HEX', 3) unless var?('HEX')
+      defvar(h, 3) unless var?(h)
       # TODO check sign and prepend '-' if negative
-      mov('word [HEX]', 0x7830) # "0x" == [48, 120]
-      mov('word [HEX+10]', 0xa)  # newline + null terminator
+      mov([var(h)], 0x7830)  # "0x" == [48, 120]
+      mov([var(h)+10], 0xa)  # newline + null terminator
     end
     boolean_expression
     asm.block do
       # convert eax to a hex string
-      lea(:esi, '[DIGITS]')
-      lea(:edi, '[HEX+9]')
+      lea(ESI, [var(d)])
+      lea(EDI, [var(h)+9])
       # build the string backwards (right to left), byte by byte
-      mov(:ecx, 4)
+      mov(ECX, 4)
     end
-    asm.emit_label(loop_label=asm.label)
+    asm.emit_label(loop_label=asm.mklabel)
     asm.block do
       # low nybble of nth byte
-      movzx(:ebx, :al)
-      and_(:bl, 0x0f)        # isolate low nybble
-      movzx(:edx, 'byte [esi+ebx]')
-      mov('byte [edi]', :dl)
-      dec(:edi)
+      movzx(EBX, AL)
+      and_(BL, 0x0f)        # isolate low nybble
+      movzx(EDX, [:byte, ESI+EBX])
+      mov([EDI], DL)
+      dec(EDI)
       # high nybble of nth byte
-      movzx(:ebx, :al)
-      and_(:bl, 0xf0)        # isolate high nybble
-      shr(:bl, 4)
-      mov(:dl, 'byte [esi+ebx]')
-      mov('byte [edi]', :dl)
-      dec(:edi)
-      shr(:eax, 8)
+      movzx(EBX, AL)
+      and_(BL, 0xf0)        # isolate high nybble
+      shr(BL, 4)
+      mov(DL, [ESI+EBX])
+      mov([EDI], DL)
+      dec(EDI)
+      shr(EAX, 8)
       loop_(loop_label)
       # write(int fd, char *s, int n)
-      mov(:eax, 4)              # SYS_write
-      lea(:ecx, '[HEX]')        # ecx = &s
+      mov(EAX, 4)               # SYS_write
+      lea(ECX, [var(h)])        # ecx = &s
       args = [1,                # fd = 1 (STDOUT)
-              :ecx,             # s = &s
+              ECX,              # s = &s
               11]               # n = 11 (excluding term, max # of chars to print)
       case platform
       when 'darwin'             # on the stack, right to left (right @ highest addr)
         ####
         # setup bogus stack frame
-        push(:ebp)
-        mov(:ebp, :esp)
-        sub(:esp, 36)
+        push(EBP)
+        mov(EBP, ESP)
+        sub(ESP, 36)
         ####
         args.reverse.each { |a| push(a) }
-        push(:eax)
+        push(EAX)
         int(0x80)
         ####
         # teardown bogus stack frame
-        xor(:eax, :eax)
-        add(:esp, 36)
-        pop(:ebx)
-        emit("leave")
+        xor(EAX, EAX)
+        add(ESP, 36)
+        pop(EBX)
+        leave
         ####
       when 'linux'
-        mov(:ebx, args[0])
-        mov(:ecx, args[1])
-        mov(:edx, args[2])
+        mov(EBX, args[0])
+        mov(ECX, args[1])
+        mov(EDX, args[2])
         int(0x80)
       end
     end
@@ -819,15 +844,15 @@ class Compiler
   def pushing(reg)
     asm.push(reg)
     yield
-    asm.add(:esp, 4)
+    asm.add(ESP, 4)
   end
 
   def op(name)
-    pushing(:eax) do
-      get_op
-      expected(name) unless match_word(name)
-      yield
-    end
+    asm.push(EAX)
+    get_op
+    expected(name) unless match_word(name)
+    yield
+    asm.add(ESP, 4)
   end
 
 
