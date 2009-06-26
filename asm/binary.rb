@@ -13,7 +13,7 @@ module Assembler
 
     include Registers
 
-    DEBUG_OUTPUT = false
+    DEBUG_OUTPUT = true
 
     # 0.size gives the real answer, we only do x86-32 though
     MachineBytes = 4    
@@ -202,18 +202,36 @@ module Assembler
       disp32 = nil
       sib = nil
 
-      # memory location / pointer
+      # effective address
       if addr.is_a?(Array)
         eff_addr = addr[1] || addr[0] # works with or without size prefix
         raise "invalid effective address: #{addr.inspect}" unless eff_addr
         case eff_addr
         when RegisterProxy
 
+          # Simple register addressing, e.g. [ESI].
+          #
           # mod == 00
           if eff_addr.register?
+            mod = 0
 
-            # TODO check for ebp / disp32 special case and use [ebp+0]
-            rm = eff_addr.regnum
+            # [ESP] and [EBP] can't be encoded directly.  The
+            # workaround is to use SIB to emit the code for [ESP+0]
+            # and [EBP+0] instead.
+            #
+            # To emit [ESP+0] we use SIB with scale=1 index=0 base=ESP.
+            if eff_addr == ESP
+              rm = 4 # SIB
+              sib = mk_sib(1, 0, eff_addr)
+
+            # For [EBP+0] we can encode [EBP]+disp8 directly.
+            elsif eff_addr == EBP
+              mod = 1
+              rm = eff_addr.regnum
+              disp8 = 0
+            else
+              rm = eff_addr.regnum
+            end
 
           elsif eff_addr.index? && eff_addr.index.is_a?(Numeric)
 
@@ -241,8 +259,9 @@ module Assembler
             raise "unsupported effective address: #{addr.inspect}"
           end
 
-        # disp32, mod == 0
+        # disp32, mod == 00
         when Numeric
+          mod = 0
           rm = 5  # 101
           disp32 = eff_addr
 
@@ -270,9 +289,15 @@ module Assembler
       if [1,2,4,8].include?(scale)
         scale = log2(scale).to_i
       else
-        raise "unsupported SIB scale: #{scale}, should be [1, 2, 4, 8]"
+        raise "unsupported SIB scale: #{scale}, should be 1, 2, 4, or 8"
       end
-      (scale << 6) | (index.regnum << 3) | base.regnum
+      if index == 0
+        index = 4
+      elsif index.respond_to?(:regnum)
+        index = index.regnum
+      end
+      base = base.regnum if base.respond_to?(:regnum)
+      return (scale << 6) | (index << 3) | base
     end
 
 

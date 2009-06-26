@@ -512,8 +512,7 @@ class Compiler
     boolean_expression                 # final value
     skip_any_whitespace
     asm.push(EAX)                      # stash final value on stack
-    asm.mov(EDX, ESP)
-    final = [EDX]
+    final = [ESP]
 
     simple_loop('for') do |end_label|
       asm.mov(ECX, [asm.var(counter)]) # get the counter
