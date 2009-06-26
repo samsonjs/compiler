@@ -13,7 +13,7 @@ module Assembler
 
     include Registers
 
-    DEBUG_OUTPUT = true
+    DEBUG_OUTPUT = false
 
     # 0.size gives the real answer, we only do x86-32 though
     MachineBytes = 4    
@@ -233,6 +233,7 @@ module Assembler
               rm = eff_addr.regnum
             end
 
+          # Bare displacements, e.g. [32] or [0x1234abcd]
           elsif eff_addr.index? && eff_addr.index.is_a?(Numeric)
 
             # disp8, mod == 01
@@ -249,13 +250,13 @@ module Assembler
               raise "address must fit in 32 bits, this doesn't: #{eff_addr.index}"
             end
 
+          # SIB
           elsif eff_addr.index?
             # scale-index-base, mod == 00 and rm == 100
             rm = 4
             sib = mk_sib(eff_addr.scale || 1, eff_addr.index, eff_addr.base)
 
           else
-            # TODO support scale-index-base byte
             raise "unsupported effective address: #{addr.inspect}"
           end
 
@@ -566,24 +567,12 @@ module Assembler
     end
 
 
+    # Signed multiply.
     def imul(*ops)
       case ops.size
 
       when 1
-        op = ops[0]
-        if rm?(op)
-          asm do
-            emit_byte(0xf7)
-            emit_modrm(op, 5)
-          end
-        elsif rm?(op, 8)
-          asm do
-            emit_byte(0xf6)
-            emit_modrm(op, 5)
-          end
-        else
-          raise "unsupported IMUL instruction: op=#{op.inspect}"
-        end
+        group3(ops[0], 5, 'IMUL')
 
       when 2
         dest, src = ops
@@ -594,24 +583,20 @@ module Assembler
       end
     end
 
+    # Unsigned multiply.
+    def mul(op)
+      group3(op, 4, 'MUL')
+    end
 
-    # TODO implement methods for opcode groups, such as IDIV and IMUL with
-    #      one operand.
 
+    # Signed divide.
     def idiv(op)
-      if rm?(op)
-        asm do
-          emit_byte(0xf7)
-          emit_modrm(op, 7)
-        end
-      elsif rm?(op, 8)
-        asm do
-          emit_byte(0xf6)
-          emit_modrm(op, 7)
-        end
-      else
-        raise "unsupported IDIV instruction: op=#{op.inspect}"
-      end
+      group3(op, 7, 'IDIV')
+    end
+
+    # Unsigned divide.
+    def div(op)
+      group3(op, 6, 'DIV')
     end
 
 
@@ -687,26 +672,12 @@ module Assembler
   
   
     def not_(op)
-      if rm?(op)
-        asm do
-          emit_byte(0xf7)
-          emit_modrm(op, 2)
-        end
-      else
-        raise "unsupported NOT instruction: op=#{op.inspect}"
-      end
+      group3(op, 2, 'NOT')
     end
   
 
     def neg(op)
-      if rm?(op)
-        asm do
-          emit_byte(0xf7)
-          emit_modrm(op, 3)
-        end
-      else
-        raise "unsupported NEG instruction: op=#{op.inspect}"
-      end
+      group3(op, 3, 'NEG')
     end
 
 
@@ -843,6 +814,26 @@ module Assembler
       asm do
         emit_byte(0xe2)
         emit_byte(delta)
+      end
+    end
+
+
+    # Opcode group #3.  1-byte opcode, 1 operand (r/m8 or r/m32).
+    # 
+    # Members of this group are: DIV, IDIV, MUL, IMUL, NEG, NOT, and TEST.
+    def group3(op, reg, instruction)
+      opcode = 
+        if rm?(op, 8)
+          0xf6
+        elsif rm?(op)
+          0xf7
+        else
+          raise "unsupported #{instruction} instruction: op=#{op.inspect}"
+        end
+
+      asm do
+        emit_byte(opcode)
+        emit_modrm(op, reg)
       end
     end
 
