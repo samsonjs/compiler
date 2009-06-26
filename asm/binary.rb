@@ -440,6 +440,33 @@ module Assembler
     end
 
 
+    def xchg(dest, src)
+      if dest == EAX && register?(src)
+        asm { emit_byte(0x90 + src.regnum) }
+      # swap the args if EAX comes last so we only need to handle one case below.
+      elsif src == EAX && register?(dest)
+        xchg(src, dest)
+      elsif rm?(dest) && register?(src)
+        asm do
+          emit_byte(0x87)
+          emit_modrm(dest, src.regnum)
+        end
+      elsif register?(dest) && rm?(src)
+        asm do
+          emit_byte(0x87)
+          emit_modrm(src, dest.regnum)
+        end
+      else
+        raise "unsupported XCHG instruction, dest=#{dest.inspect} src=#{src.inspect}"
+      end
+    end
+
+    # convert double to quad (sign-extend EAX into EDX)
+    def cdq
+      asm { emit_byte(0x99) }
+    end
+
+
     def add(dest, src)
       # add r/m32, imm8
       if rm?(dest) && immediate?(src, :byte)
@@ -514,16 +541,51 @@ module Assembler
     end
 
 
-    def imul(op)
-      raise "unimplemented"
-      asm do
+    def imul(*ops)
+      case ops.size
+
+      when 1
+        op = ops[0]
+        if rm?(op)
+          asm do
+            emit_byte(0xf7)
+            emit_modrm(op, 5)
+          end
+        elsif rm?(op, 8)
+          asm do
+            emit_byte(0xf6)
+            emit_modrm(op, 5)
+          end
+        else
+          raise "unsupported IMUL instruction: op=#{op.inspect}"
+        end
+
+      when 2
+        dest, src = ops
+        raise "unsupported IMUL instruction, dest=#{dest.inspect} src=#{src.inspect}"
+
+      else
+        raise ArgumentError, "IMUL accepts exactly 1 or 2 operands (got #{ops.inspect})"
       end
     end
 
 
+    # TODO implement methods for opcode groups, such as IDIV and IMUL with
+    #      one operand.
+
     def idiv(op)
-      raise "unimplemented"
-      asm do
+      if rm?(op)
+        asm do
+          emit_byte(0xf7)
+          emit_modrm(op, 7)
+        end
+      elsif rm?(op, 8)
+        asm do
+          emit_byte(0xf6)
+          emit_modrm(op, 7)
+        end
+      else
+        raise "unsupported IDIV instruction: op=#{op.inspect}"
       end
     end
 
