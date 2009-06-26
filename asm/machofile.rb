@@ -18,11 +18,6 @@ module Assembler
       @data = []                       # Blobs of data that appear at the end of the file.
                                        #   (text, data, symtab, ...)
       @current_segment = nil           # An alias for the last defined segment.
-
-      # Leave room for __PAGEZERO, a single 0x1000 (4kb) page at 0x0.  The
-      # __TEXT segment starts at 0x1000 and contains mach headers and load
-      # commands.
-      @text_offset = 0x1000
     end
 
 
@@ -100,7 +95,7 @@ module Assembler
       # Update the segment.
       segment[:nsects] += 1
       segment[:cmdsize] += section.bytesize
-      
+
       yield(section) if block_given?
       
       return section
@@ -231,12 +226,15 @@ module Assembler
       # TODO sanity checks, e.g. assert(@header[:ncmds] == @load_command.size)
       # ... perhaps an option to recalculate such data as well.
       
+      # Now that we have all the pieces of the file defined we can calculate
+      # the file offsets of segments and sections.
       recalculate_offsets
+
       
       # |------------------|
-      # |  Mach Header     |
+      # |  Mach Header     |          Part 1
       # |------------------|
-      # |  Segment 1       |
+      # |  Segment 1       |          Part 2
       # |    Section 1     | ---
       # |    Section 2     | --|--
       # |    ...           |   | |
@@ -247,16 +245,23 @@ module Assembler
       # |  ...             |   | |
       # |  [Symtab cmd]    |   | |
       # |------------------|   | |
-      # |  Section data 1  | <-- |
+      # |  Section data 1  | <-- |    Part 3
       # |  Section data 2  | <----
       # |  ...             |
       # |  [Symtab data]   |
-      # |------------------|
-      
-      
-      # dump the mach header
+      # |------------------|      
+
+      ###################################
+      # Mach-O file Part 1: Mach Header #
+      ###################################
+
       obj = @header.serialize
+
       
+      #####################################
+      # Mach-O file Part 2: Load Commands #
+      #####################################
+
       # dump each load command (which include the section headers under them)
       obj += @load_commands.map do |cmd|               
                sects = @sections[cmd[:segname]] rescue []
@@ -265,19 +270,24 @@ module Assembler
                end
             end.join
       
-      # and finally dump the blobs at the end
+
+      ###################################
+      # Mach-O file Part 3: Binary data #
+      ###################################
+
       obj += @data.join
+
       
       return obj
     end
 
     
-    # Update the file offsets in SegmentCommand, SymtabCommand, and Section structs.
+    # Update the file offsets in segments and sections.
     
     def recalculate_offsets
 
-      # Maintain the offset into the the file.  This is used to update
-      # the various structures.
+      # Maintain the offset into the the file on disk.  This is used
+      # to update the various structures.
       offset = @header.bytesize
             
       # First pass over load commands.  Most sizes are filled in here.
