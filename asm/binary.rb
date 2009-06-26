@@ -803,7 +803,7 @@ module Assembler
     end
 
 
-    # TODO remove this, LOOP sucks ... only accepts a 1-byte signed offset.
+    # NOTE: LOOP only accepts a 1-byte signed offset.  Don't use it.
     def loop_(label)
       real_eip = @eip + 2 # loop instruction is 2 bytes
       delta = @symtab.lookup_label(label) - real_eip

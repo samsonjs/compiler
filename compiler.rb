@@ -547,7 +547,8 @@ class Compiler
     asm.pop(ECX)
 
     match_word('end')
-    asm.loop_(start_label)
+    asm.dec(ECX)
+    asm.jnz(start_label)
 
     # Phony push!  break needs to clean up the stack, but since we
     # don't know if there is a break at this point we fake a push and
