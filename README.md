@@ -1,7 +1,9 @@
 sjs
+
 [sami.samhuri@gmail.com](mailto:sami.samhuri@gmail.com)
 
 published : 2009-09-22
+
 updated   : 2009-09-24
 
 
@@ -11,7 +13,7 @@ Overview
 A compiler for fun and education.  Written (mostly) in Ruby and based
 on the tutorial "Let's Build a Compiler" by Jack Crenshaw[1].
 
-[1] http://compilers.iecc.com/crenshaw/
+[1]: http://compilers.iecc.com/crenshaw/
 
 The semantics are simple and familiar to all programmers.  Eager
 evaluation, assignment with the equals sign, arithmetic using + - *
@@ -132,28 +134,104 @@ pretty slim at ~3000 LOC.  About 2100 of those are actual code.  I did
 not write this compiler with the intention of anyone else reading it
 but there are a reasonable about of comments.
 
+<table>
+  <tr>
+    <th>Real Lines</th>
+    <th>Total Lines</th>
+    <th>Filename</th>
+  </tr>
 
- Real   Total  Filename
- Lines  Lines
- -----  -----  --------
-   87  /  112  build.rb
-  617  /  891  compiler.rb
-   12  /   29  asm/asm.rb
-  569  /  843  asm/binary.rb
-  197  /  319  asm/cstruct.rb
-    4  /    6  asm/elfsymtab.rb
-    4  /    8  asm/elfwriter.rb
-  170  /  374  asm/machofile.rb
-   95  /  163  asm/macho.rb
-   19  /   28  asm/machosym.rb
-   48  /   77  asm/machosymtab.rb
-   19  /   25  asm/machowriter.rb
-   16  /   25  asm/objwriter.rb
-   20  /   31  asm/registers.rb
-   42  /   66  asm/regproxy.rb
-   56  /   89  asm/symtab.rb
-  131  /  183  asm/text.rb
- 2097  / 3269  total
+  <tr>
+    <td>87</td>
+    <td>112</td>
+    <td>build.rb</td>
+  </tr>
+  <tr>
+    <td>617</td>
+    <td>891</td>
+    <td>compiler.rb</td>
+  </tr>
+  <tr>
+    <td>12</td>
+    <td>29</td>
+    <td>asm/asm.rb</td>
+  </tr>
+  <tr>
+    <td>569</td>
+    <td>843</td>
+    <td>asm/binary.rb</td>
+  </tr>
+  <tr>
+    <td>197</td>
+    <td>319</td>
+    <td>asm/cstruct.rb</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>6</td>
+    <td>asm/elfsymtab.rb</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>8</td>
+    <td>asm/elfwriter.rb</td>
+  </tr>
+  <tr>
+    <td>170</td>
+    <td>374</td>
+    <td>asm/machofile.rb</td>
+  </tr>
+  <tr>
+    <td>95</td>
+    <td>163</td>
+    <td>asm/macho.rb</td>
+  </tr>
+  <tr>
+    <td>19</td>
+    <td>28</td>
+    <td>asm/machosym.rb</td>
+  </tr>
+  <tr>
+    <td>48</td>
+    <td>77</td>
+    <td>asm/machosymtab.rb</td>
+  </tr>
+  <tr>
+    <td>19</td>
+    <td>25</td>
+    <td>asm/machowriter.rb</td>
+  </tr>
+  <tr>
+    <td>16</td>
+    <td>25</td>
+    <td>asm/objwriter.rb</td>
+  </tr>
+  <tr>
+    <td>20</td>
+    <td>31</td>
+    <td>asm/registers.rb</td>
+  </tr>
+  <tr>
+    <td>42</td>
+    <td>66</td>
+    <td>asm/regproxy.rb</td>
+  </tr>
+  <tr>
+    <td>56</td>
+    <td>89</td>
+    <td>asm/symtab.rb</td>
+  </tr>
+  <tr>
+    <td>131</td>
+    <td>183</td>
+    <td>asm/text.rb</td>
+  </tr>
+  <tr>
+    <td>2097</td>
+    <td>3269</td>
+    <td><b>total</b></td>
+  </tr>
+</table>
 
 
 Happy hacking!
