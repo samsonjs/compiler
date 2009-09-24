@@ -1,9 +1,7 @@
-sjs
+sjs<br>
+[sami.samhuri@gmail.com](mailto:sami.samhuri@gmail.com)<br>
 
-[sami.samhuri@gmail.com](mailto:sami.samhuri@gmail.com)
-
-published : 2009-09-22
-
+published : 2009-09-22<br>
 updated   : 2009-09-24
 
 
