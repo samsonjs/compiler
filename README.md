@@ -19,7 +19,7 @@ and /, loops, if/else statement, etc.  Integers are the only data type.
 
 
 NOTE: OS X is the only platform that compiles working binaries right
-      now.  ELF support for Linux coming soon.
+now.  ELF support for Linux coming soon.
 
 
 Compiling
