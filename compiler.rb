@@ -192,7 +192,7 @@ class Compiler
 
   def bit_expr(op, token)
     match(token)
-    if block_given? yield else term end
+    if block_given? then yield else term end
     asm.pop(EBX)
     asm.send(op, EAX, EBX)
   end

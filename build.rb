@@ -49,7 +49,7 @@ rescue ParseError => e
   exit(1)
 end
 
-def run_and_warn_on_failure(command, name)
+def run_and_warn_on_failure(command)
   output = `#{command}`
   if $?.exitstatus != 0
     puts
