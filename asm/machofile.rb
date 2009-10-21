@@ -131,39 +131,36 @@ module Assembler
     end
 
 
+    # Basis for #data, #const, and #bss methods.
+    def segment_based_on_filetype(segname, options={})
+      unless @current_segment
+        permissions = VM_PROT_READ
+        permisions |= VM_PROT_WRITE if options.delete(:writable)
+        segment(segname_based_on_filetype(segname)) do |seg|
+          seg[:initprot] = seg[:maxprot] = permissions
+        end
+      end
+      yield if block_given?
+      return self
+    end
+
     # Define a standard data section under the current segment (if present).
     # This behaves similarly to the text method.
     #
     def data(data, sectname='__data', segname='__DATA')
-      unless @current_segment
-        segment(segname_based_on_filetype(segname)) do |seg|
-          seg[:maxprot] = VM_PROT_READ | VM_PROT_WRITE
-          seg[:initprot] = VM_PROT_READ | VM_PROT_WRITE
-        end
+      segment_based_on_filetype(segname, :writable => true) do
+        section(sectname, segname, data)
       end
-      
-      section(sectname, segname, data)
-      
-      return self
     end
-
 
     # Define a standard const section under the current segment (if present).
     # This behaves similarly to the data method.
     #
     def const(data, sectname='__const', segname='__DATA')
-      unless @current_segment
-        segment(segname_based_on_filetype(segname)) do |seg|
-          seg[:maxprot] = VM_PROT_READ
-          seg[:initprot] = VM_PROT_READ
-        end
+      segment_based_on_filetype(segname) do
+        section(sectname, segname, data)
       end
-      
-      section(sectname, segname, data)
-      
-      return self
     end
-
 
     # Define a standard BSS section under the current segment (if present).
     # This behaves similarly to the data method but accepts a VM size instead
@@ -171,16 +168,9 @@ module Assembler
     # uninitialized data.
     #
     def bss(vmsize, sectname='__bss', segname='__DATA')
-      unless @current_segment
-        segment(segname_based_on_filetype(segname)) do |seg|
-          seg[:maxprot] = VM_PROT_READ | VM_PROT_WRITE
-          seg[:initprot] = VM_PROT_READ | VM_PROT_WRITE
-        end
+      segment_based_on_filetype(segname, :writable => true) do
+        section(sectname, segname, '', vmsize)
       end
-      
-      section(sectname, segname, '', vmsize)
-      
-      return self
     end
 
    

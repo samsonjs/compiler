@@ -190,25 +190,23 @@ class Compiler
   # bit expressions #
   ###################
 
-  def bitor_expr
-    match('|')
-    term
+  def bit_expr(op, token)
+    match(token)
+    if block_given? yield else term end
     asm.pop(EBX)
-    asm.or_(EAX, EBX)
+    asm.send(op, EAX, EBX)
   end
 
-  def bitand_expr
-    match('&')
-    signed_factor
-    asm.pop(EBX)
-    asm.and_(EAX, EBX)
+  def bitor_expr
+    bit_expr(:or, '|')
   end
 
   def xor_expr
-    match('^')
-    term
-    asm.pop(EBX)
-    asm.xor(EAX, EBX)
+    bit_expr(:xor, '^')
+  end
+
+  def bitand_expr
+    bit_expr(:and, '&') { signed_factor }
   end
 
 
@@ -323,6 +321,9 @@ class Compiler
   # true (-1) if the difference was below zero and false (0)
   # otherwise (using JL, jump if less than).
   def cmp_relation(a, b, options={})
+    expression
+    asm.pop(EBX)
+
     # Invert the sense of the test?
     invert = options[:invert]
 
@@ -347,8 +348,6 @@ class Compiler
   #
   # if a > b then b - a < 0
   def gt_relation
-    expression
-    asm.pop(EBX)
     cmp_relation(EAX, EBX) # b - a
   end
 
@@ -357,8 +356,6 @@ class Compiler
   #
   # if a < b then a - b < 0
   def lt_relation
-    expression
-    asm.pop(EBX)
     cmp_relation(EBX, EAX) # a - b
   end
 
@@ -367,8 +364,6 @@ class Compiler
   #
   # if a >= b then !(a < b)
   def ge_relation
-    expression
-    asm.pop(EBX)
     # Compare them as in less than but invert the result.
     cmp_relation(EBX, EAX, :invert => true)
   end
@@ -378,8 +373,6 @@ class Compiler
   # 
   # if a <= b then !(a > b)
   def le_relation
-    expression
-    asm.pop(EBX)
     # Compare them as in greater than but invert the result.
     cmp_relation(EAX, EBX, :invert => true)
   end
@@ -474,20 +467,20 @@ class Compiler
     asm.emit_label(end_label)
   end
 
-  def while_stmt
-    simple_loop('while') do |end_label|
+  def condition_loop(name, jump_instruction)
+    simple_loop(name) do |end_label|
       condition
       skip_any_whitespace
-      asm.jz(end_label)
+      asm.send(jump_instruction, end_label)
     end
   end
 
+  def while_stmt
+    condition_loop('while', :jz) # done when == 0 (falsish)
+  end
+
   def until_stmt
-    simple_loop('until') do |end_label|
-      condition
-      skip_any_whitespace
-      asm.jnz(end_label)
-    end
+    condition_loop('until', :jnz) # done when != 0 (truthy)
   end
 
   def repeat_stmt

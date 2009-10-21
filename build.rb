@@ -49,16 +49,21 @@ rescue ParseError => e
   exit(1)
 end
 
+def run_and_warn_on_failure(command, name)
+  output = `#{command}`
+  if $?.exitstatus != 0
+    puts
+    print output
+    name = command.split.first
+    raise "#{name} failed: #{$?.exitstatus}"
+  end
+end
+
 # assemble using nasm, return resulting filename.
 def assemble(filename, binformat='elf')
   f = base(filename)
   outfile = "#{f}.o"
-  output = `nasm -f #{binformat} -g -o #{outfile} #{filename} 2>&1`
-  if $?.exitstatus != 0
-    puts
-    print output
-    raise "nasm failed: #{$?.exitstatus}"
-  end
+  run_and_warn_on_failure("nasm -f #{binformat} -g -o #{outfile} #{filename} 2>&1")
   return outfile
 end
 
@@ -71,12 +76,7 @@ def link(filename, platform='linux')
                else
                  raise "unsupported platform: #{platform}"
                end
-  output = `#{cmd} #{args} -o #{f} #{filename} 2>&1`
-  if $?.exitstatus != 0
-    puts
-    print output
-    raise "ld failed: #{$?.exitstatus}"
-  end
+  run_and_warn_on_failure("#{cmd} #{args} -o #{f} #{filename} 2>&1")
   `chmod u+x #{f}`
   return f
 end

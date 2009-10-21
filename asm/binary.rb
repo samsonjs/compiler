@@ -616,7 +616,7 @@ module Assembler
     
     def dec(op)
       if register?(op)
-        # dec r16 / dec r32
+        # dec reg32
         asm { emit_byte(0x48 + op.regnum) }
       else
         raise "unsupported DEC instruction, op=#{op.inspect}"
@@ -655,6 +655,7 @@ module Assembler
         raise "unsupported AND instruction: dest=#{dest.inspect}, src=#{src.inspect}"
       end
     end
+    alias_method :and, :and_
 
 
     def xor(dest, src)
@@ -674,6 +675,7 @@ module Assembler
     def not_(op)
       group3(op, 2, 'NOT')
     end
+    alias_method :not, :not_
   
 
     def neg(op)
@@ -816,6 +818,7 @@ module Assembler
         emit_byte(delta)
       end
     end
+    alias_method :loop, :loop_
 
 
     # Opcode group #3.  1-byte opcode, 1 operand (r/m8 or r/m32).

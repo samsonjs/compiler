@@ -18,37 +18,22 @@ module Assembler
       return 0x2800
     end
 
-    def all_symbols
-      symbols = []
-      
-      # Functions (section #1, __text)
-      #
-      # All labels are exported.  This should be changed and only functions exported!
-      # TODO fixme ... 
-      #
+    def make_symbols(vars, type, segnum)
       # Note: Sorting a Ruby hash gives an alist, e.g. [[<key>, <value>], ...]
       #       We can use map on it as if it were a hash so it works nicely.
-      #
-      symbols +=
-        @labels.sort { |a,b| a[1] <=> b[1] }.
-                map do |name,addr|
-                  MachOSym.new(name, N_SECT | N_EXT, 1, 0, addr)
-                end
-      
-      # Constants (section #2, __const)
-      symbols += @consts.sort { |a,b| a[1] <=> b[1] }.
-                         map do |name, addr|
-                           MachOSym.new(name, N_SECT, 2, 0, addr)
-                         end
-      
-      # Variables (section #3, __bss)
-      #
-      # TODO FIXME the last var exported ends up after main somewhere... WTF?!
-      symbols += @vars.sort { |a,b| a[1] <=> b[1] }.
-                       map do |name, addr|
-                         MachOSym.new(name, N_SECT, 3, 0, addr)
-                       end
-      
+      vars.sort { |a,b| a[1] <=> b[1] }.
+           map do |name, addr|
+             MachOSym.new(name, type, segnum, 0, addr)
+           end
+    end
+
+    def all_symbols
+      # TODO FIXME:
+      # - the last var exported ends up after main somewhere... WTF?!
+      # - All labels are exported.  This should be changed and only functions exported!
+      symbols = make_symbols(@labels, N_SECT | N_EXT, 1) + # Functions (section #1, __text)
+                make_symbols(@consts, N_SECT, 2)         + # Constants (section #2, __const)
+                make_symbols(@vars, N_SECT, 3)             # Variables (section #3, __bss)
       return symbols
     end
     
