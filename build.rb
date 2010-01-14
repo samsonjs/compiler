@@ -8,14 +8,18 @@ require 'asm/machofile'
 
 # usage: build.rb <filename> [elf | macho ] [asm | bin]
 
+DefaultBinFormats = Hash.new('bin')
+def binformat(p,f) DefaultBinFormats[p]=f end
+binformat 'darwin', 'macho'
+binformat 'linux',  'elf'
+
 def main
   filename = ARGV[0].to_s
   raise "can't read #{filename}" unless File.readable?(filename)
-  binformat = ARGV[1] ? ARGV[1].downcase : 'elf'
-  format = ARGV[2] ? ARGV[2].downcase : 'asm'
   platform = `uname -s`.chomp.downcase
-  puts "Building #{format} from #{filename} for #{platform}, binformat is #{binformat} ..."
-  outfile = build(filename, platform, format, binformat)
+  binformat = ARGV[1] ? ARGV[1].downcase : DefaultBinFormats[platform]
+  puts "Building #{filename} for #{platform}, binformat is #{binformat} ..."
+  outfile = build(filename, platform, binformat)
   puts outfile
   exit
 end
