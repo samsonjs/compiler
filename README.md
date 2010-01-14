@@ -34,9 +34,9 @@ You need gcc, so install Xcode or use MacPorts to build gcc.
 Linux
 -----
 
-You need ld which lives in the binutils package.
+You need ruby and ld which lives in the binutils package.
 
-    % sudo aptitude install binutils
+    % sudo aptitude install ruby binutils
 
 That's it!  The assembler is included in ~900 lines of Ruby (including
 comments).
@@ -50,7 +50,7 @@ not append 'elf' or 'macho' to the command.
 The resulting native executable will be called 'filename' and you
 should be able to run it directly.
 
-    % ./filename <return>.
+    % ./filename <return>
 
 
 
@@ -69,15 +69,32 @@ or anything else you can think of.
 
 Supported statements are:
 
- * assignment  e.g. foo = 4096
- * if/else     e.g. if x < 0 a=0 else a=1 end
- * while       e.g. while x > 0 x=x-1 end
- * until       e.g. until x == 0 x=x-1 end
- * break       e.g. break
- * repeat      e.g. repeat x=x-1 if x == 0 break end end
- * for         e.g. for i=1 to 5 x=x+1 end
- * do          e.g. do 5 x=x+1 end
- * print       e.g. a=1 print
+ * assignment
+   e.g. foo = 4096
+
+ * if/else
+   e.g. if x < 0 a=0 else a=1 end
+
+ * while
+   e.g. while x > 0 x=x-1 end
+
+ * until
+   e.g. until x == 0 x=x-1 end
+
+ * break
+   e.g. break
+
+ * repeat
+   e.g. repeat x=x-1 if x == 0 break end end
+
+ * for
+   e.g. for i=1 to 5 x=x+1 end
+
+ * do
+   e.g. do 5 x=x+1 end
+
+ * print
+   e.g. a=1 print
 
 Print is strange, it prints the last value calculated in hex and that
 is all.  Please don't look at the implementation. ;-)
@@ -130,7 +147,7 @@ code and there are no optimizations.
 Hopefully I can reduce the number of lines by factoring more, but it's
 pretty slim at ~3000 LOC.  About 2100 of those are actual code.  I did
 not write this compiler with the intention of anyone else reading it
-but there are a reasonable about of comments.
+but there are a reasonable amount of comments.
 
 <table>
   <tr>
