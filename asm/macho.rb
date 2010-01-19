@@ -3,8 +3,9 @@ require 'asm/cstruct'
 # The MachO module contains constants and structures related to the
 # Mach Object format (Mach-O).  They are relevant to Darwin on OS X.
 # 
-# Constants and structures as defined in /usr/include/mach-o/loader.h on
-# Mac OS X Leopard (10.5.7).  Also see <mach-o/stab.h> and <mach-o/nlist.h>.
+# Constants and structures as defined in /usr/include/mach-o/loader.h
+# on Mac OS X Leopard (10.5.7).  Also see <mach-o/stab.h>,
+# <mach-o/nlist.h>, and <mach-o/reloc.h>.
 
 module MachO
 
@@ -25,8 +26,8 @@ module MachO
   end
 
   # Values for the magic field.
-  MH_MAGIC = 0xfeedface    # Mach magic number.
-  MH_CIGAM = 0xcefaedfe    # In the reverse byte-order.
+  MH_MAGIC = 0xfeedface          # Mach magic number (big-endian).
+  MH_CIGAM = 0xcefaedfe          # Little-endian version.
 
   # Values for the filetype field.
   MH_OBJECT     = 0x1
@@ -58,8 +59,8 @@ module MachO
   # Values for the cmd member of LoadCommand CStructs (incomplete!).
   LC_SEGMENT        = 0x1
   LC_SYMTAB         = 0x2
-  LC_SYMSEG	        = 0x3
-  LC_THREAD	        = 0x4
+  LC_SYMSEG         = 0x3
+  LC_THREAD         = 0x4
   LC_UNIXTHREAD	    = 0x5  
 
   class SegmentCommand < LoadCommand
@@ -122,7 +123,32 @@ module MachO
   S_ZEROFILL = 0x1
   S_CSTRING_LITERALS = 0x2
   
+
+  ###########################
+  # Relocation info support #
+  ###########################
   
+  class RelocationInfo < CStruct
+    int32  :r_address   # offset in the section to what is being relocated
+    uint32 :r_info
+  end
+
+# NOTE: r_info is a packed bit field with the following members:
+#
+# (CStruct should eventually support bitfields, but doesn't right now.)
+#
+#     uint32 r_symbolnum : 24 -- symbol index if r_extern == 1 or section ordinal if r_extern == 0
+#     int    r_pcrel     :  1 -- was relocated pc relative already
+#     int    r_length    :  2 -- 0=byte, 1=word, 2=long, 3=quad
+#     int    r_extern    :  1 -- 1 for exported symbols, 0 othewise
+#     int    r_type      :  4 -- if not 0, machine specific relocation type (always 0)
+
+  R_ABS = 0         # Absolute relocation type
+                    # (r_symbolnum == R_ABS for absolute symbols that don't need reloc)
+
+  # Relocation types (r_type)
+  GENERIC_RELOC_VANILLA = 0
+
   
   ########################
   # Symbol table support #
