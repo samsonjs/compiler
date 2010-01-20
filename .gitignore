@@ -1,7 +1,10 @@
+.DS_Store
 *.o
 trash
 test/*.o
 test/*.asm
+
+# TODO just ignore test/bin/* or similar
 test/test_big
 test/test_lt
 test/test_gt
@@ -17,3 +20,4 @@ test/test_do
 test/test_for
 test/test_break
 test/test_print
+test/test_huge
