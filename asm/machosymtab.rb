@@ -8,22 +8,12 @@ module Assembler
     
     include MachO
 
-    def const_offset
-      return 0x2000
-    end
-
-    def bss_offset
-      # TODO figure out how to calculate these, or how to let the linker do it!
-      #      ... relocation tables perhaps?
-      return 0x2800
-    end
-
-    def make_symbols(vars, type, segnum)
+    def make_symbols(vars, base_addr, type, segnum)
       # Note: Sorting a Ruby hash gives an alist, e.g. [[<key>, <value>], ...]
       #       We can use map on it as if it were a hash so it works nicely.
       vars.sort { |a,b| a[1] <=> b[1] }.
-           map do |name, addr|
-             MachOSym.new(name, type, segnum, 0, addr)
+           map do |name, offset|
+             MachOSym.new(name, type, segnum, 0, base_addr + offset)
            end
     end
 
@@ -31,10 +21,30 @@ module Assembler
       # TODO FIXME:
       # - the last var exported ends up after main somewhere... WTF?!
       # - All labels are exported.  This should be changed and only functions exported!
-      symbols = make_symbols(@labels, N_SECT | N_EXT, 1) + # Functions (section #1, __text)
-                make_symbols(@consts, N_SECT, 2)         + # Constants (section #2, __const)
-                make_symbols(@vars, N_SECT, 3)             # Variables (section #3, __bss)
+
+      section = 1
+      
+      # Functions (section #1, __text)
+      symbols = make_symbols(@labels, text_offset, N_SECT | N_EXT, section)
+      section += 1
+
+      # Constants (section #2, __const)
+      if @consts.size > 0
+        symbols += make_symbols(@consts, const_offset, N_SECT, section)
+        section += 1
+      end
+
+      # Variables (section #3, __bss)
+      if @vars.size > 0
+        symbols += make_symbols(@vars, bss_offset, N_SECT, section)
+      end
+
       return symbols
+    end
+
+    # this is fairly stupid but works
+    def bss_section
+      @consts.size > 0 ? 3 : 2
     end
     
     def nlist_ary
@@ -53,8 +63,24 @@ module Assembler
     end
     
     def stab
-      # The empty strings result in a string that begins and ends with
+      # The empty strings result in a string that begins and ends with a null byte
       ['', all_symbols, ''].flatten.map { |sym| sym.to_s }.join("\0")
+    end
+
+    def reloc(r_address, r_symbolnum=0, r_length=2, r_extern=0, r_pcrel=0, r_type=0)
+      r_info = (r_type << 28) | (r_extern << 27) | (r_length << 25) |
+        (r_pcrel << 24) | r_symbolnum
+      @reloc_info << RelocationInfo.new(r_address, r_info)
+    end
+
+    def reloc_info
+      n = bss_section
+      @reloc_info.each {|r| r[:r_info] |= n}
+    end
+
+    def calculate_offsets(text_size)
+      @const_offset = @text_offset + text_size
+      @bss_offset = @const_offset + @const_size
     end
 
   end
