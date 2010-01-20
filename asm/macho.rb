@@ -137,11 +137,11 @@ module MachO
 #
 # (CStruct should eventually support bitfields, but doesn't right now.)
 #
-#     uint32 r_symbolnum : 24 -- symbol index if r_extern == 1 or section ordinal if r_extern == 0
-#     int    r_pcrel     :  1 -- was relocated pc relative already
-#     int    r_length    :  2 -- 0=byte, 1=word, 2=long, 3=quad
-#     int    r_extern    :  1 -- 1 for exported symbols, 0 othewise
-#     int    r_type      :  4 -- if not 0, machine specific relocation type (always 0)
+#     r_symbolnum : 24 -- symbol index if r_extern == 1 or section ordinal if r_extern == 0
+#     r_pcrel     :  1 -- was relocated pc relative already
+#     r_length    :  2 -- 0=byte, 1=word, 2=long, 3=quad
+#     r_extern    :  1 -- 1 for exported symbols, 0 othewise
+#     r_type      :  4 -- if not 0, machine specific relocation type (always 0)
 
   R_ABS = 0         # Absolute relocation type
                     # (r_symbolnum == R_ABS for absolute symbols that don't need reloc)
