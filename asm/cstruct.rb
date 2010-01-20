@@ -1,7 +1,9 @@
-# Struct does some trickery with custom allocators so we can't subclass it without writing C.
-# Instead we define a CStruct class that does something similar enough for our purpose.  It is
-# subclassed just like any other class.  A nice side-effect of this syntax is that it is always
-# clear that a CStruct is just a class and instances of the struct are objects.
+# Struct does some trickery with custom allocators so we can't
+# subclass it without writing C.  Instead we define a CStruct class
+# that does something similar enough for our purpose.  It is
+# subclassed just like any other class.  A nice side-effect of this
+# syntax is that it is always clear that a CStruct is just a class and
+# instances of the struct are objects.
 #    
 # Some light metaprogramming is used to make the following syntax possible:
 #
@@ -27,9 +29,26 @@
 #   uint32 
 # end
 #
-# Nothing tricky or confusing there.  Members of a CStruct class are declared in the
-# class definition.  A different definition using a more static approach probably wouldn't
-# be very hard...  if performance is critical ... but then why are you using Ruby? ;-)
+# Nothing tricky or confusing there.  Members of a CStruct class are
+# declared in the class definition.  A different definition using a
+# more static approach probably wouldn't be very hard...  if
+# performance is critical ... but then why are you using Ruby? ;-)
+#
+#
+# TODO support bit fields
+#
+# Bit fields should be supported by passing the number of bits a field
+# should occupy. Perhaps we could use the size 'pack' for the rest of
+# the field.
+#
+# class RelocationInfo < CStruct
+#   int32  :address
+#   uint32 :symbolnum, 24
+#   pack   :pcrel,      1
+#   pack   :length,     2
+#   pack   :extern,     1
+#   pack   :type,       4
+# end
 
 class CStruct
 
@@ -85,24 +104,28 @@ class CStruct
   # Class Instance Methods #
   ##########################
   
-  # Note: const_get and const_set are used so the constants are bound at runtime, to the
-  #       real class that has subclassed CStruct.  I figured Ruby would do this but I haven't
-  #       looked at the implementation of constants so it might be tricky.
+  # Note: const_get and const_set are used so the constants are bound
+  #       at runtime, to the real class that has subclassed CStruct.
+  #       I figured Ruby would do this but I haven't looked at the
+  #       implementation of constants so it might be tricky.
   #
-  #       All of this could probably be avoided with Ruby 1.9 and private class variables.
-  #       That is definitely something to experiment with.
+  #       All of this could probably be avoided with Ruby 1.9 and
+  #       private class variables.  That is definitely something to
+  #       experiment with.
   
   class <<self
     
     def inherited(subclass)
       subclass.instance_eval do
         
-        # These "constants" are only constant references.  Structs can be modified.
-        # After the struct is defined it is still open, but good practice would be not
-        # to change a struct after it has been defined.
+        # These "constants" are only constant references.  Structs can
+        # be modified.  After the struct is defined it is still open,
+        # but good practice would be not to change a struct after it
+        # has been defined.
         # 
-        # To support inheritance properly we try to get these constants from the enclosing
-        # scope (and clone them before modifying them!), and default to empty, er, defaults.
+        # To support inheritance properly we try to get these
+        # constants from the enclosing scope (and clone them before
+        # modifying them!), and default to empty, er, defaults.
         
         members = const_get(:Members).clone rescue []
         member_index = const_get(:MemberIndex).clone rescue {}
