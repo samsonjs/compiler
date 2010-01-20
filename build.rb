@@ -87,14 +87,14 @@ end
 
 def build(filename, platform='linux', binformat='elf')
   objfile = base(filename) + '.o'
-  symtab, objwriter =
+  symtab, objwriter_class =
     case binformat
-    when 'elf':   [Assembler::ELFSymtab.new, Assembler::ELFFile.new]
-    when 'macho': [Assembler::MachOSymtab.new, Assembler::MachOFile.new]
+    when 'elf':   [Assembler::ELFSymtab.new, Assembler::ELFFile]
+    when 'macho': [Assembler::MachOSymtab.new, Assembler::MachOFile]
     else
       raise "unsupported binary format: #{binformat}"
     end
-  compile(filename, objfile, Assembler::Binary.new(platform, symtab, objwriter))
+  compile(filename, objfile, Assembler::Binary.new(platform, symtab, objwriter_class))
   exefile = link(objfile, platform)
   return exefile
 end

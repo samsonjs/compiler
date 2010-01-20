@@ -13,6 +13,7 @@
 # require 'unroller'
 
 require 'asm/registers'
+require 'asm/varproxy'
 
 class ParseError < StandardError
   attr_reader :caller, :context
@@ -34,22 +35,19 @@ class Compiler
   attr_reader :asm
 
   def initialize(input, asm)
-    # XXX for development only!
     @indent = 0                  # for pretty printing
-
     @look = ''                   # Next lookahead char.
     @token = nil                 # Type of last read token.
     @value = nil                 # Value of last read token.
     @input = input               # Stream to read from.
-
-    @asm = asm
+    @asm = asm                   # assembler
 
     # seed the lexer
     get_char
   end
 
   def compile
-    block
+    block # parse a block of code
     expected(:'end of file') unless eof?
     asm.output
   end
@@ -267,7 +265,7 @@ class Compiler
     asm.cmp(reg, 0)             # if false do nothing
     asm.jz(end_label)
     asm.mov(reg, -1)            # truthy, make it true
-    asm.emit_label(end_label)
+    asm.deflabel(end_label)
   end
 
   def relation
@@ -336,11 +334,11 @@ class Compiler
     asm.not_(EAX) if invert    # (or true if inverted)
     asm.jmp(end_label)
 
-    asm.emit_label(true_label)
+    asm.deflabel(true_label)
     asm.xor(EAX, EAX)            # return true
     asm.not_(EAX) unless invert  # (or false if inverted)
 
-    asm.emit_label(end_label)
+    asm.deflabel(end_label)
   end
 
   # a: <on the stack>
@@ -387,11 +385,14 @@ class Compiler
     name = @value
     match('=')
     boolean_expression
-    asm.defvar(name) unless asm.var?(name)
-    asm.mov([asm.var(name)], EAX)
+    lval = asm.var!(name)
+    asm.mov([lval], EAX)
   end
 
   # Parse a code block.
+  #
+  # TODO replace the case..when with a lookup table
+  #      (might be exposed in the language later)
   def block(label=nil)
     scan
     until @value == 'else' || @value == 'end' || eof?
@@ -438,13 +439,13 @@ class Compiler
       skip_any_whitespace
       end_label = asm.mklabel(:endif) # now we need the 2nd label
       asm.jmp(end_label)
-      asm.emit_label(else_label)
+      asm.deflabel(else_label)
       @indent += 1
       block(label)
       @indent -= 1
     end
     match_word('end')
-    asm.emit_label(end_label)
+    asm.deflabel(end_label)
   end
 
   # Used to implement the Two-Label-Loops (while, until, repeat).
@@ -455,7 +456,7 @@ class Compiler
   def simple_loop(name)
     start_label = asm.mklabel(:"#{name}_loop")
     end_label = asm.mklabel(:"end_#{name}")
-    asm.emit_label(start_label)
+    asm.deflabel(start_label)
 
     yield(end_label)
 
@@ -464,7 +465,7 @@ class Compiler
     @indent -= 1
     match_word('end')
     asm.jmp(start_label)
-    asm.emit_label(end_label)
+    asm.deflabel(end_label)
   end
 
   def condition_loop(name, jump_instruction)
@@ -494,13 +495,13 @@ class Compiler
   #   s = s + x
   # e
   def for_stmt
-    counter = get_name
-    asm.defvar(counter)
+    name = get_name
+    counter = asm.defvar(name)
     match('=')
     boolean_expression                 # initial value
     asm.sub(EAX, 1)                    # pre-decrement because of the
                                        # following pre-increment
-    asm.mov([asm.var(counter)], EAX)   # stash the counter in memory
+    asm.mov([counter], EAX)   # stash the counter in memory
     match_word('to', :scan => true)
     boolean_expression                 # final value
     skip_any_whitespace
@@ -508,9 +509,9 @@ class Compiler
     final = [ESP]
 
     simple_loop('for') do |end_label|
-      asm.mov(ECX, [asm.var(counter)]) # get the counter
+      asm.mov(ECX, [counter]) # get the counter
       asm.add(ECX, 1)                  # increment
-      asm.mov([asm.var(counter)], ECX) # store the counter
+      asm.mov([counter], ECX) # store the counter
       asm.cmp(final, ECX)              # check if we're done
       asm.jz(end_label)                # if so jump to the end
     end
@@ -529,7 +530,7 @@ class Compiler
 
     start_label = asm.mklabel(:do)
     end_label = asm.mklabel(:enddo)
-    asm.emit_label(start_label)
+    asm.deflabel(start_label)
 
     asm.push(ECX)
 
@@ -548,7 +549,7 @@ class Compiler
     # always clean up the stack after.
     asm.sub(ESP, 4)
 
-    asm.emit_label(end_label)
+    asm.deflabel(end_label)
 
     # If there was a break we have to clean up the stack here.  If
     # there was no break we clean up the phony push above.
@@ -573,35 +574,42 @@ class Compiler
 
   # print eax in hex format
   def print_stmt
-    # variable names
-    d = 'DIGITS'
-    h = 'HEX'
+    # variables
+    d = '__DIGITS'
+    h = '__HEX'
+
+    digits = if asm.var?(d)
+               asm.var(d)
+             else
+               d_var = asm.defvar(d, 4)
+               asm.block do
+                 # define a lookup table of digits
+                 mov([d_var],    0x33323130)
+                 mov([d_var+4],  0x37363534)
+                 mov([d_var+8],  0x62613938)
+                 mov([d_var+12], 0x66656463)
+               end
+               d_var
+             end
+
+    # 3 dwords == 12 chars
+    hex = asm.var!(h, 3)
     
     asm.block do
-      # define a lookup table of digits
-      unless var?(d)
-        defvar(d, 4)
-        mov([var(d)],    0x33323130)
-        mov([var(d)+4],  0x37363534)
-        mov([var(d)+8],  0x62613938)
-        mov([var(d)+12], 0x66656463)
-      end
-      # 3 dwords == 12 chars
-      defvar(h, 3) unless var?(h)
       # TODO check sign and prepend '-' if negative
-      mov([var(h)], 0x7830)  # "0x" == [48, 120]
-      mov([var(h)+10], 0xa)  # newline + null terminator
+      mov([hex], 0x7830)  # "0x" == [48, 120]
+      mov([hex+10], 0xa)  # newline + null terminator
     end
     boolean_expression
     asm.block do
       # convert eax to a hex string
-      lea(ESI, [var(d)])
-      lea(EDI, [var(h)+9])
+      lea(ESI, [digits])
+      lea(EDI, [hex+9])
       # build the string backwards (right to left), byte by byte
       mov(ECX, 4)
     end
-    asm.emit_label(loop_label=asm.mklabel)
     asm.block do
+      deflabel(loop_label=mklabel)
       # low nybble of nth byte
       movzx(EBX, AL)
       and_(BL, 0x0f)        # isolate low nybble
@@ -619,7 +627,7 @@ class Compiler
       loop_(loop_label)
       # write(int fd, char *s, int n)
       mov(EAX, 4)               # SYS_write
-      lea(ECX, [var(h)])        # ecx = &s
+      lea(ECX, [hex])           # ecx = &s
       args = [1,                # fd = 1 (STDOUT)
               ECX,              # s = &s
               11]               # n = 11 (excluding term, max # of chars to print)

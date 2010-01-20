@@ -4,8 +4,15 @@
 # 
 # sjs
 # may 2009
+#
+# Refer to the Intel[1] or AMD documentationon on x86 for explanations
+# of Mod-R/M encoding, the Scale-Index-Base (SIB) byte, opcode groups.
+#
+# The start and exit shell codes were obtained by disassembling
+# minimal binaries on the respective platforms.
 
 require 'asm/asm'
+require 'asm/varproxy'
 
 module Assembler
 
@@ -25,8 +32,9 @@ module Assembler
     SignedInt = MinSigned..MaxSigned
     SignedByte = -128..127
 
-    # This is used for encoding instructions.  Just as the generated asm
-    # contains "BITS 32", binary is generated for 32-bit protected mode.
+    # This is used for encoding instructions.  Just as the equivalent
+    # assembly would contain "BITS 32", binary is generated for 32-bit
+    # protected mode.
     DefaultOperandSize = :dword
 
     SizeMap = {:byte => 8, :word => 16, :dword => 32}
@@ -50,63 +58,150 @@ module Assembler
                   ]
     }
 
-    attr_reader :eip
+    attr_reader :ip
 
-    def initialize(platform, symtab, objwriter)
+    def initialize(platform, symtab, objwriter_class)
       super(platform)
       @symtab = symtab
-      @objwriter = objwriter
-      @binary = []                 # Byte array of machine code.
-      @eip = 0                     # Our instruction pointer, or the number of bytes written.
+      @objwriter_class = objwriter_class
+      # @objwriter = objwriter
       
+      # Almost a byte array, except for addresses.
+      #
+      # Addresses take the form [:<type>, <name>]
+      # where <type> is one of: var, const, or label
+      #
+      # NOTE the type is redundant because of VariableProxy#const?
+      #      and labels are just strings.
+      #
+      #      however, we could accept strings for variable names
+      #      if we keep the type tag. something to think about.
+      @ir = []
+
+      # Our instruction pointer, or the number of bytes written.
+      @ip = 0
+
+      # Map locations in the byte array to var proxies so we can
+      # resolve address operations on the 2nd pass.
+      @proxies = {}
+
       # Always include the _main entry point in our symbol table.  It begins at the
       # beginning of the __TEXT segment, 0x0.
-      @symtab.deflabel('_main', @eip)
+      @symtab.deflabel('_main', @ip)
+
+      X86_start[@platform].each {|byte| emit_byte(byte)}
     end
 
     def output
-      resolve_labels
-      blobs = X86_start[@platform] + @binary + X86_exit[@platform]
-      binary = blobs.pack('c*')
-      @objwriter.text(binary)
-      @objwriter.const(@symtab.const_data)
-      @objwriter.bss(@symtab.bss_size)
-      @objwriter.symtab(@symtab)
-      @objwriter.serialize
+      X86_exit[@platform].each {|byte| emit_byte(byte)}
+
+      byte_array = resolve_labels
+      
+      #puts "1st pass: " + byte_array.inspect if DEBUG_OUTPUT
+
+      binary = package(byte_array)
+
+      @symtab.calculate_offsets(binary.length)
+      if DEBUG_OUTPUT
+        puts ">>> text offset:  0x#{@symtab.text_offset.to_s(16)}"
+        puts ">>> const offset: 0x#{@symtab.const_offset.to_s(16)}"
+        puts ">>> bss offset:   0x#{@symtab.bss_offset.to_s(16)}"
+      end
+
+      # Now that we know where everything lies do the 2nd pass
+      # calculating and filling in final var and const addresses.
+      #
+      # outline:
+      #  - resolve all variable proxies in @proxies replacing
+      #    the 4 bytes (0xff) with the real address
+      
+      bss_offset = @symtab.bss_offset
+      const_offset = @symtab.const_offset
+      @proxies.each do |i, proxy|
+        #puts ">>> Resolving #{proxy.name}" if DEBUG_OUTPUT
+        var = @symtab.var(proxy.name)
+        base_addr = if proxy.const?
+                      const_offset + @symtab.const(proxy.name)
+                    else
+                      bss_offset + @symtab.var(proxy.name)
+                    end
+        #puts ">>> Replacing #{byte_array[i,4].map{|x|'0x' + x.to_s(16)}.inspect} with #{num_to_quad(proxy.resolve(base_addr)).map{|x|'0x' + x.to_s(16)}.inspect}" if DEBUG_OUTPUT
+        byte_array[i, 4] = num_to_quad(proxy.resolve(base_addr))
+      end
+
+      binary = package(byte_array)
+
+      #puts "2nd pass: " + byte_array.inspect if DEBUG_OUTPUT
+
+      objwriter = @objwriter_class.new
+      objwriter.text(binary)
+      objwriter.const(@symtab.const_data) if @symtab.const_size > 0
+      objwriter.bss(@symtab.bss_size) if @symtab.bss_size > 0
+      objwriter.reloc(@symtab.reloc_info)
+      objwriter.symtab(@symtab)
+      objwriter.serialize
     end
 
     def resolve_labels
       bytes_read = 0
-      @binary.each_with_index do |x, i|
+      bytes = []
+      @ir.each_with_index do |x, i|
         if x.is_a?(Numeric)
+          bytes << x
           bytes_read += 1
 
         elsif addr?(x)
-          @binary[i, 1] = x[1..-1]
-          bytes_read += 1
+          # remember this so we can replace the bogus addr later
+          @proxies[bytes_read] = x[1]
 
-        else # label to resolve
+          # add a relocation entry for this address
+          @symtab.reloc(bytes_read)
+
+          # fill in said bogus addr
+          bytes += [0xff, 0xff, 0xff, 0xff]
+
+          bytes_read += 4
+
+
+        # TODO find out if we should calculate addrs as offsets rather than
+        #      absolute as they are done now. (ok for Mach-O, maybe not ELF)
+        elsif label?(x)
           # the actual eip points to the next instruction already, so should we.
-          real_eip = bytes_read + 4
-          addr = @symtab.lookup_label(x) - real_eip # dest - src to get relative addr
-          puts "resolved label: #{x} = 0x#{@symtab.lookup_label(x).to_s(16)} (rel: 0x#{addr.to_s(16)}, eip = 0x#{real_eip.to_s(16)}, bytes_read = 0x#{bytes_read.to_s(16)})" if DEBUG_OUTPUT
-          @binary[i, 1] = num_to_quad(addr)
-          # count the first byte just written, the rest are counted normally
-          bytes_read += 1
+          real_ip = bytes_read + 4
+          name = x[1]
+          addr = @symtab.lookup_label(name) - real_ip # dest - src to get relative addr
+          #puts "resolved label: #{x} = 0x#{@symtab.lookup_label(name).to_s(16)} (rel: 0x#{addr.to_s(16)}, ip = 0x#{real_ip.to_s(16)}, bytes_read = 0x#{bytes_read.to_s(16)})" if DEBUG_OUTPUT
+
+
+          bytes += num_to_quad(addr)
+          bytes_read += 4
+
+        else
+          raise "unknown value in the IR at #{bytes_read} - #{x.inspect}"
         end
       end
+
+      return bytes
     end
 
+    def package(bytes)
+      bytes.pack('c*')
+    end
+
+    # Silly semantics, but labels don't count as an address since they
+    # don't need to be deferred.
     def addr?(x)
-      x.is_a?(Array) && x[0] == :addr
+      x.is_a?(Array) && [:var, :const].include?(x[0])
+    end
+
+    def label?(x)
+      x.is_a?(Array) && x[0] == :label
     end
     
-    def addr_size(addr)
-      addr.length - 1
-    end
-    
+    # XXX this should probably evaluate the value somehow
     def defconst(name, bytes, value)
       @symtab.defconst(name, bytes, value)
+      return const(name)
     end
 
     # Define a variable with the given name and size in bytes.
@@ -116,27 +211,49 @@ module Assembler
       else
         STDERR.puts "[warning] attempted to redefine #{name}"
       end
+      return var(name)
     end
 
-    # These methods are all delegated to the symbol table.
-    %w[var var? const const?].each do |method|
-      define_method(method) do |name|
-        @symtab.send(method, name)
+    def var(name)
+      STDERR.puts "[error] undefined variable #{name}" unless var?(name)
+      # TODO bail on undefined vars
+      VariableProxy.new(name)
+    end
+
+    def const(name)
+      STDERR.puts "[error] undefined variable #{name}" unless const?(name)
+      # TODO bail on undefined consts
+      VariableProxy.new(name, true)
+    end
+
+    def var?(name)
+      @symtab.var?(name)
+    end
+
+    def const?(name)
+      @symtab.const?(name)
+    end
+
+    # Define a variable unless it exists.
+    def var!(name, bytes=4)
+      if var?(name)
+        var(name)
+      else
+        defvar(name, bytes)
       end
     end
-    
 
     # Count the bytes that were encoded in the given block.
     def asm
       # stash the current number of bytes written
-      instruction_offset = @eip
+      instruction_offset = @ip
       
-      print "0x#{@eip.to_s(16).rjust(4, '0')}\t" if DEBUG_OUTPUT
+      print "0x#{@ip.to_s(16).rjust(4, '0')}\t" if DEBUG_OUTPUT
 
       yield
       
       # return the number of bytes written
-      @eip - instruction_offset
+      @ip - instruction_offset
       
       puts if DEBUG_OUTPUT
     end
@@ -160,26 +277,38 @@ module Assembler
       # make sure it's a byte
       raise "not a byte: #{byte.inspect}" unless byte == byte & 0xff
       
-      byte = byte & 0xff      
+      byte = byte & 0xff
       ###  end of pointless code
       
       print (byte >= 0 && byte < 0x10 ? '0' : '') + byte.to_s(16) + ' ' if DEBUG_OUTPUT
       
-      @binary << byte
-      @eip += 1
+      @ir << byte
+      @ip += 1
     end
 
-    def emit_addr(addr)
-      @eip += addr.length
-      addr.insert(0, :addr)
-      puts addr.inspect if DEBUG_OUTPUT
-      @binary << addr
+    # addresses are emited as arrays of bytes, prefixed with :var, :const, or :label
+    def emit_addr(type, name)
+      placeholder = [type, name]
+      puts placeholder.inspect if DEBUG_OUTPUT
+      @ir << placeholder
+
+      # all addresses are 32-bits and jumps are all 32-bit relative
+      @ip += 4
     end
 
-    def emit_future_addr(label)
-      print "<#{label}> " if DEBUG_OUTPUT
-      @binary << label
-      @eip += 4   # all jumps are 32-bit relative for now
+    def emit_var(name_or_proxy)
+      proxy = name_or_proxy.is_a?(VariableProxy) ? name_or_proxy : var(name_or_proxy)
+      emit_addr(:var, proxy)
+    end
+
+    def emit_const(name)
+      proxy = name_or_proxy.is_a?(VariableProxy) ? name_or_proxy : const(name_or_proxy)
+      emit_addr(:const, proxy)
+    end
+
+    def emit_label(name)
+      print "<#{name}> " if DEBUG_OUTPUT
+      emit_addr(:label, name)
     end
 
     def emit_dword(num)
@@ -190,9 +319,9 @@ module Assembler
       @symtab.unique_label(suffix)
     end
 
-    def emit_label(name)
-      puts "\n#{name} (0x#{@eip.to_s(16)}):" if DEBUG_OUTPUT
-      @symtab.deflabel(name, @eip)
+    def deflabel(name)
+      puts "\n#{name} (0x#{@ip.to_s(16)}):" if DEBUG_OUTPUT
+      @symtab.deflabel(name, @ip)
     end
 
     def emit_modrm(addr, reg=0)
@@ -201,12 +330,14 @@ module Assembler
       disp8 = nil
       disp32 = nil
       sib = nil
+      var = nil # variable proxy
 
       # effective address
       if addr.is_a?(Array)
         eff_addr = addr[1] || addr[0] # works with or without size prefix
         raise "invalid effective address: #{addr.inspect}" unless eff_addr
         case eff_addr
+
         when RegisterProxy
 
           # Simple register addressing, e.g. [ESI].
@@ -266,6 +397,11 @@ module Assembler
           rm = 5  # 101
           disp32 = eff_addr
 
+        when VariableProxy
+          mod = 0
+          rm = 5
+          var = eff_addr
+
         else
           raise "unsupported effective address: #{addr.inspect}"
         end
@@ -275,14 +411,22 @@ module Assembler
         mod = 3
         rm = addr.regnum
 
+      # XXX TODO elsif addr.respond_to?(:name)
+      #          (VariableProxy) => [:(var|const), addr.name]
+      #
+      # i.e. a pointer to that var
+
       else
         raise "unsupported effective address: #{addr.inspect}"
       end
 
       emit_byte((mod << 6) | (reg << 3) | rm)
       emit_byte(sib) if sib
-      emit_addr([disp8]) if disp8
-      emit_addr(num_to_quad(disp32)) if disp32
+
+      emit_byte(disp8) if disp8
+
+      emit_dword(disp32) if disp32
+      emit_var(var) if var
     end
 
 
@@ -311,12 +455,25 @@ module Assembler
       op.is_a?(Numeric) && op >= -(2 ** bits / 2) && op <= (2 ** bits - 1)
     end
 
+    # Return true if op is a valid operand of the specified size.
+    #     (:byte, :word, :dword)
+    #
+    # Valid operands are:
+    #
+    #   * registers
+    #
+    #   * effective addresses (wrapped in an array to look like nasm code)
+    #
+    # XXX This method is pretty ugly.
     def rm?(op, size=DefaultOperandSize)
-      register?(op, size) || op.is_a?(Array) && (op.size == 1 || op[0] == size)
+      register?(op, size) ||
+        (op.is_a?(Array) &&
+         (op.size == 1 && [Numeric, RegisterProxy, VariableProxy].any?{|c| c == op[0].class}) ||
+         (op.size == 2 && rm?(op[1])))
     end
 
     def offset?(addr, size=DefaultOperandSize)
-      addr.is_a?(Array) && addr[0].is_a?(Numeric)
+      addr.is_a?(Array) && (addr[0].is_a?(Numeric) || addr[0].is_a?(VariableProxy))
     end
 
     def constant?(op)
@@ -382,7 +539,7 @@ module Assembler
       
       # This is an array of arguments to be passed to emit_modrm, if it is set.
       modrm = nil
-      
+
       # version 1: mov r32, imm32
       if register?(dest) && immediate?(src)
         opcode = 0xb8 + dest.regnum # dest encoded in instruction
@@ -434,10 +591,20 @@ module Assembler
         raise "unsupported MOV instruction, #{dest.inspect}, #{src.inspect}"
       end
 
+      dword = immediate || offset
+
       asm do
         emit_byte(opcode)
         emit_modrm(*modrm) if modrm
-        emit_dword(immediate || offset) if immediate || offset
+        if dword.is_a?(VariableProxy)
+          if dword.const?
+            emit_const(dword)
+          else
+            emit_var(dword)
+          end
+        elsif dword
+          emit_dword(dword)
+        end
       end    
     end
 
@@ -446,7 +613,7 @@ module Assembler
       
       # movzx Gv, ??
       if register?(dest)
-        
+
         opcode = case
                  when rm?(src, :byte): 0xb6 # movzx Gv, Eb
                  when rm?(src, :word): 0xb7 # movzx Gv, Ew
@@ -742,7 +909,7 @@ module Assembler
     def jmp(label)
       asm do
         emit_byte(0xe9)
-        emit_future_addr(label)
+        emit_label(label)
       end
     end
 
@@ -768,7 +935,7 @@ module Assembler
       asm do
         emit_byte(0x0f)
         emit_byte(opcode)
-        emit_future_addr(label)
+        emit_label(label)
       end
     end
 
@@ -807,8 +974,8 @@ module Assembler
 
     # NOTE: LOOP only accepts a 1-byte signed offset.  Don't use it.
     def loop_(label)
-      real_eip = @eip + 2 # loop instruction is 2 bytes
-      delta = @symtab.lookup_label(label) - real_eip
+      real_ip = @ip + 2 # loop instruction is 2 bytes
+      delta = @symtab.lookup_label(label) - real_ip
       unless SignedByte === delta
         raise "LOOP can only jump -128 to 127 bytes, #{label} is #{delta} bytes away"
       end
