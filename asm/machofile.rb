@@ -8,16 +8,20 @@ module Assembler
     
     attr_accessor :header, :load_commands, :sections, :data
     attr_accessor :current_segment
-    attr_accessor :text_offset
     
     def initialize(filetype=MH_OBJECT)
       @header = MachHeader.new(MH_MAGIC, CPU_TYPE_X86, CPU_SUBTYPE_X86_ALL, filetype, 0, 0, 0)
       @load_commands = []              # All defined segments.
-      @sections = {}                   # Map of segment names to lists of segments. 
+      @sections = {}                   # Map of segment names to lists of sections. 
       @section_disk_size = Hash.new(0) # Sections store their VM size so we need their sizes on disk.
+      @section_offset = 0              # Offset of the next section's data, in bytes.
       @data = []                       # Blobs of data that appear at the end of the file.
-                                       #   (text, data, symtab, ...)
+                                       #  (text, data, relocation info, symtab, ...)
       @current_segment = nil           # An alias for the last defined segment.
+      @text_segname = nil              # Name of __TEXT segement
+      @text_sect_index = nil           # Index of __text section
+      @text_data_index = nil           # Index into @data of __text section data
+      @reloc_info = nil                # Copy of relocation info array
     end
 
 
@@ -82,11 +86,12 @@ module Assembler
                 segment=@current_segment, type=S_REGULAR)
       
       # Create the new section.
-      section = Section.new(name, segname, 0, vmsize, 0, 0, 0, 0, 0, 0, type)
+      section = Section.new(name, segname, @section_offset, vmsize, 0, 0, 0, 0, 0, 0, type)
       
       # Add this section to the map of segment names to sections.
       (@sections[segment[:segname]] ||= []) << section
       @section_disk_size[name] = data.size
+      @section_offset += data.size
       @data << data if data.size > 0
       
       # Update the header.
@@ -116,20 +121,32 @@ module Assembler
     # name given (__TEXT).
     
     def text(data, sectname='__text', segname='__TEXT')
+      real_segname = nil
       unless @current_segment
-        segment(segname_based_on_filetype(segname)) do |seg|
+        real_segname = segname_based_on_filetype(segname)
+        segment(real_segname) do |seg|
           seg[:maxprot] = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE
           seg[:initprot] = VM_PROT_READ | VM_PROT_EXECUTE
-        end        
+        end
       end
       
       section(sectname, segname, data) do |sect|
+        # reloff and nreloc are calculated later (in calculate_offsets)
         sect[:flags] = 0x400 # S_ATTR_SOME_INSTRUCTIONS
       end
+
+      # Remember where section and data are so we can update them later.
+      @text_segname = real_segname || segname
+      @text_sect_index = @sections[@text_segname].length-1
+      @text_data_index = @data.length-1
       
       return self
     end
 
+    def update_text(data)
+      raise 'no __text segment defined yet' unless @text_data_index
+      @data[@text_data_index] = data
+    end
 
     # Basis for #data, #const, and #bss methods.
     def segment_based_on_filetype(segname, options={})
@@ -173,6 +190,19 @@ module Assembler
       end
     end
 
+    # Define a relocation table. Usually between segments and the
+    # symbol table.
+    #
+    # Accepts an array of relocation info structs.
+    def reloc(reloc_info)
+      @data << if reloc_info.respond_to?(:join)
+                 reloc_info.map {|r| r.serialize}.join
+               else
+                 reloc_info
+               end
+      @reloc_info = reloc_info.map {|x| x.clone}
+      return self
+    end
    
     # Define a symbol table.  This should usually be placed at the end of the
     # file.
@@ -204,7 +234,6 @@ module Assembler
       
       @data << nlist_ary.map {|n| n.serialize}.join
       @data << stab
-      
       return self
     end
 
@@ -218,63 +247,34 @@ module Assembler
       
       # Now that we have all the pieces of the file defined we can calculate
       # the file offsets of segments and sections.
-      recalculate_offsets
-
-      
-      # |------------------|
-      # |  Mach Header     |          Part 1
-      # |------------------|
-      # |  Segment 1       |          Part 2
-      # |    Section 1     | ---
-      # |    Section 2     | --|--
-      # |    ...           |   | |
-      # |  Segment 2       |   | |
-      # |    Section 4     |   | |
-      # |    Section 5     |   | |
-      # |    ...           |   | |
-      # |  ...             |   | |
-      # |  [Symtab cmd]    |   | |
-      # |------------------|   | |
-      # |  Section data 1  | <-- |    Part 3
-      # |  Section data 2  | <----
-      # |  ...             |
-      # |  [Symtab data]   |
-      # |------------------|      
+      calculate_offsets
 
       ###################################
       # Mach-O file Part 1: Mach Header #
       ###################################
+      @header.serialize +
 
-      obj = @header.serialize
-
-      
       #####################################
       # Mach-O file Part 2: Load Commands #
       #####################################
-
       # dump each load command (which include the section headers under them)
-      obj += @load_commands.map do |cmd|               
-               sects = @sections[cmd[:segname]] rescue []
-               sects.inject(cmd.serialize) do |data, sect|
-                 data + sect.serialize
-               end
-            end.join
-      
+      @load_commands.map do |cmd|               
+        sects = @sections[cmd[:segname]] rescue []
+        sects.inject(cmd.serialize) do |data, sect|
+          data + sect.serialize
+        end
+      end.join +
 
       ###################################
       # Mach-O file Part 3: Binary data #
       ###################################
-
-      obj += @data.join
-
-      
-      return obj
+      @data.join
     end
 
     
     # Update the file offsets in segments and sections.
     
-    def recalculate_offsets
+    def calculate_offsets
 
       # Maintain the offset into the the file on disk.  This is used
       # to update the various structures.
@@ -317,7 +317,7 @@ module Assembler
 
       # Second pass over load commands.  Fill in file offsets.
       @load_commands.each do |cmd|
-        case cmd[:cmd]\
+        case cmd[:cmd]
           
         when LC_SEGMENT
           seg = cmd
@@ -329,6 +329,13 @@ module Assembler
           end
           
         when LC_SYMTAB
+          if @reloc_info
+            # update text section with relocation info
+            __text = @sections[@text_segname][@text_sect_index]
+            __text[:reloff] = offset
+            __text[:nreloc] = @reloc_info.length
+            offset += @reloc_info.first.bytesize * @reloc_info.length
+          end
           st = cmd
           st[:symoff] = offset
           offset += st[:nsyms] * Nlist.bytesize
@@ -341,8 +348,8 @@ module Assembler
         end
         
       end # @load_commands.each
-      
-    end # def recalculate_offsets
+
+    end # def calculate_offsets
   
   
     #######
@@ -354,7 +361,7 @@ module Assembler
       when MH_OBJECT: ''
       when MH_EXECUTE: segname
       else
-        raise "unsupported MachO file type! #{@header.inspect}"
+        raise "unsupported MachO file type: #{@header.inspect}"
       end
     end
     
