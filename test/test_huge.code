@@ -1,17 +1,17 @@
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -64,19 +64,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -129,19 +129,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -194,19 +194,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -259,19 +259,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -324,19 +324,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -389,19 +389,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -454,19 +454,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -519,19 +519,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
@@ -584,19 +584,19 @@ end
 
 xitcode=a-a
 a=1
-print
+print a
 aa=10
-print
+print aa
 somethinglong=65536
-print
+print somethinglong
 x=5*(3-5)
-print
+print x
 c=1- -a
-print
+print c
 g=1* -1
-print
+print g
 h=x*2+2
-print
+print h
 j=h-27/9
 k=j-8/2
 m=k-4*(5+5+5)
