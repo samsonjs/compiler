@@ -205,7 +205,7 @@ module Assembler
     end
 
     # Define a variable with the given name and size in bytes.
-    def defvar(name, bytes=4)
+    def defvar(name, bytes=MachineBytes)
       unless @symtab.var?(name)
         @symtab.defvar(name, bytes)
       else
@@ -235,7 +235,7 @@ module Assembler
     end
 
     # Define a variable unless it exists.
-    def var!(name, bytes=4)
+    def var!(name, bytes=MachineBytes)
       if var?(name)
         var(name)
       else
