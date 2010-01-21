@@ -447,7 +447,8 @@ module Assembler
 
 
     def register?(op, size=DefaultOperandSize)
-      op.is_a?(RegisterProxy) && op.size == size || op.size == SizeMap[size]
+      op.is_a?(RegisterProxy) && op.size == size ||
+        op.respond_to?(:size) && op.size == SizeMap[size]
     end
 
     def immediate?(op, size=DefaultOperandSize)
@@ -466,10 +467,16 @@ module Assembler
     #
     # XXX This method is pretty ugly.
     def rm?(op, size=DefaultOperandSize)
+      # register
       register?(op, size) ||
-        (op.is_a?(Array) &&
-         (op.size == 1 && [Numeric, RegisterProxy, VariableProxy].any?{|c| c == op[0].class}) ||
-         (op.size == 2 && rm?(op[1])))
+        
+        # [register/memory]
+        (op.is_a?(Array) && op.size == 1 &&
+         [Numeric, RegisterProxy, VariableProxy].any?{|c| c == op[0].class}) ||
+
+        # [<size>, memory]
+        (op.is_a?(Array) && op.size == 2 && op[0] == size &&
+         [Numeric, RegisterProxy, VariableProxy].any?{|c| c == op[1].class})
     end
 
     def offset?(addr, size=DefaultOperandSize)
