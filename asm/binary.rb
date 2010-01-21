@@ -526,7 +526,7 @@ module Assembler
     end
 
 
-    # 8 versions of the mov instruction are supported:
+    # 9 versions of the mov instruction are supported:
     #   1.  mov reg32, immediate32
     #   2a. mov reg32, r/m32
     #   2b. mov eax, memoffset32
@@ -535,6 +535,7 @@ module Assembler
     #   4.  mov r/m32, immediate32
     #   5.  mov r/m8, reg8
     #   6.  mov reg8, r/m8
+    #   7.  mov r/m8, imm8
     def mov(dest, src)
       
       # These 2 are used in the same way, just the name differs to make the
@@ -590,11 +591,19 @@ module Assembler
         opcode = 0x8a
         modrm = [src, dest.regnum]
 
+      # version 7: mov r/m8, imm8
+      elsif rm?(dest, :byte) && immediate?(src, :byte)
+        opcode = 0xc6
+        modrm = [dest, 0]
+        immediate_byte = src
+
       else
         # puts "rm?(dest): #{rm?(dest)}\t\trm?(src): #{rm?(src)}"
         # puts "register?(dest): #{register?(dest)}\t\tregister?(src): #{register?(src)}"
         # puts "immediate?(dest): #{immediate?(dest)}\t\timmediate?(src): #{immediate?(src)}"
         # puts "offset?(dest): #{offset?(dest)}\t\toffset?(src): #{offset?(src)}"
+        # puts "rm?(dest, :byte): #{rm?(dest)}\t\trm?(src, :byte): #{rm?(src, :byte)}"
+        # puts "immediate?(dest, :byte): #{immediate?(dest)}\t\timmediate?(src, :byte): #{immediate?(src, :byte)}"
         raise "unsupported MOV instruction, #{dest.inspect}, #{src.inspect}"
       end
 
@@ -603,14 +612,20 @@ module Assembler
       asm do
         emit_byte(opcode)
         emit_modrm(*modrm) if modrm
+
         if dword.is_a?(VariableProxy)
           if dword.const?
             emit_const(dword)
           else
             emit_var(dword)
           end
+
         elsif dword
           emit_dword(dword)
+
+        elsif immediate_byte
+          emit_byte(immediate_byte)
+
         end
       end    
     end
