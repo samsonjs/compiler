@@ -581,7 +581,7 @@ class Compiler
     digits = if asm.var?(d)
                asm.var(d)
              else
-               d_var = asm.defvar(d, 4)
+               d_var = asm.defvar(d, 16)
                asm.block do
                  # define a lookup table of digits
                  mov([d_var],    0x33323130)
@@ -592,15 +592,18 @@ class Compiler
                d_var
              end
 
-    # 3 dwords == 12 chars
-    hex = asm.var!(h, 3)
+    # 12 bytes: 2 for "0x", 8 hex digits, 2 for newline + null terminator
+    hex = asm.var!(h, 12)
     
     asm.block do
       # TODO check sign and prepend '-' if negative
-      mov([hex], 0x7830)  # "0x" == [48, 120]
-      mov([hex+10], 0xa)  # newline + null terminator
+      mov([hex], 0x7830)  # "0x" ==> 48, 120
+      mov([hex+4], 0)     # zero the rest
+      mov([hex+8], 0)
+      mov([:byte, hex+10], 0xa)  # newline
+      mov([:byte, hex+11], 0)    # null terminator
     end
-    boolean_expression
+    boolean_expression # result in EAX
     asm.block do
       # convert eax to a hex string
       lea(ESI, [digits])
