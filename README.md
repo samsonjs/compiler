@@ -84,10 +84,7 @@ Supported statements are:
  * repeat<br>       e.g. repeat x=x-1 if x == 0 break end end
  * for<br>          e.g. for i=1 to 5 x=x+1 end
  * do<br>           e.g. do 5 x=x+1 end
- * print<br>        e.g. a=1 print
-
-Print is strange, it prints the last value calculated in hex and that
-is all.
+ * print &lt;expr&gt;<br>        e.g. print 42
 
 Supported operations are the following, in increasing order of
 precedence:
