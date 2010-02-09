@@ -27,10 +27,18 @@ class Compiler
 
   include Assembler::Registers
 
-  Keywords = %w[
-    if else end while until repeat for to do break
-    print
-  ]
+  Keywords = {
+    'if'     => :if_else_stmt,
+    'while'  => :while_stmt,
+    'until'  => :until_stmt,
+    'repeat' => :repeat_stmt,
+    'for'    => :for_stmt,
+    'do'     => :do_stmt,
+    'break'  => :break_stmt,
+    'print'  => :print_stmt,
+    'else'   => nil,
+    'end'    => nil
+  }
   
   attr_reader :asm
 
@@ -41,6 +49,9 @@ class Compiler
     @value = nil                 # Value of last read token.
     @input = input               # Stream to read from.
     @asm = asm                   # assembler
+    @keywords = Keywords.clone
+    @keyword_names = @keywords.keys
+    @label_stack = []
 
     # seed the lexer
     get_char
@@ -380,6 +391,13 @@ class Compiler
   # statements and controls structures #
   ######################################
 
+  def keyword
+    unless action = @keywords[@value]
+      raise "unsupported keyword: #{@value}"
+    end
+    send(action)
+  end
+
   # Parse an assignment statement.  Value is in eax.
   def assignment
     name = @value
@@ -390,59 +408,35 @@ class Compiler
   end
 
   # Parse a code block.
-  #
-  # TODO replace the case..when with a lookup table
-  #      (might be exposed in the language later)
-  def block(label=nil)
+  def block
+    @indent += 1
     scan
     until @value == 'else' || @value == 'end' || eof?
       if @token == :keyword
-        case @value
-        when 'if'
-          if_else_stmt(label)
-        when 'while'
-          while_stmt
-        when 'until'
-          until_stmt
-        when 'repeat'
-          repeat_stmt
-        when 'for'
-          for_stmt
-        when 'do'
-          do_stmt
-        when 'break'
-          break_stmt(label)
-        when 'print'
-          print_stmt
-        else
-          raise "unsupported keyword: #{@value}"
-        end
+        keyword
       else
         assignment
       end
       scan
     end
+    @indent -= 1
   end
   
   # Parse an if-else statement.
-  def if_else_stmt(label)
+  def if_else_stmt
     else_label = asm.mklabel(:end_or_else)
     end_label = else_label      # only generated if else clause
                                 # present
     condition
     skip_any_whitespace
     asm.jz(else_label)
-    @indent += 1
-    block(label)
-    @indent -= 1
+    block
     if @token == :keyword && @value == 'else'
       skip_any_whitespace
       end_label = asm.mklabel(:endif) # now we need the 2nd label
       asm.jmp(end_label)
       asm.deflabel(else_label)
-      @indent += 1
-      block(label)
-      @indent -= 1
+      block
     end
     match_word('end')
     asm.deflabel(end_label)
@@ -457,12 +451,8 @@ class Compiler
     start_label = asm.mklabel(:"#{name}_loop")
     end_label = asm.mklabel(:"end_#{name}")
     asm.deflabel(start_label)
-
     yield(end_label)
-
-    @indent += 1
-    block(end_label)
-    @indent -= 1
+    pushing_label(end_label) { block }
     match_word('end')
     asm.jmp(start_label)
     asm.deflabel(end_label)
@@ -534,9 +524,7 @@ class Compiler
 
     asm.push(ECX)
 
-    @indent += 1
-    block(end_label)
-    @indent -= 1
+    pushing_label(end_label) { block }
 
     asm.pop(ECX)
 
@@ -556,9 +544,9 @@ class Compiler
     asm.add(ESP, 4)
   end
 
-  def break_stmt(label)
-    if label
-      asm.jmp(label)
+  def break_stmt
+    if top_label
+      asm.jmp(top_label)
     else
       expected(:'break to be somewhere useful',
                :got => :'a break outside a loop')
@@ -798,7 +786,7 @@ class Compiler
   def get_name
     expected(:identifier) unless alpha?(@look)
     @value = many(:alnum?)
-    @token = Keywords.include?(@value) ? :keyword : :identifier
+    @token = @keyword_names.include?(@value) ? :keyword : :identifier
     @value
   end
 
@@ -887,6 +875,24 @@ class Compiler
           end)
     print indent
     puts @value
+  end
+
+  def pushing_label(label)
+    push_label(label)
+    yield
+    pop_label
+  end
+
+  def push_label(label)
+    @label_stack.push(label)
+  end
+
+  def top_label
+    @label_stack[-1]
+  end
+
+  def pop_label
+    @label_stack.pop
   end
 
   # hook(:print_token,
