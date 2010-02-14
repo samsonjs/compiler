@@ -6,12 +6,6 @@
 # sjs
 # may 2009
 
-# XXX Comment if unused, unroller is too fucking slow! rubygems is a bit
-#     of a slouch too.
-# 
-# require 'rubygems'
-# require 'unroller'
-
 require 'asm/registers'
 require 'asm/varproxy'
 
