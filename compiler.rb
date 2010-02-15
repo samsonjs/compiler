@@ -53,6 +53,9 @@ class Compiler
   # Include :all for a very general test.
   }.merge(:all => Ops.values.flatten.map{|op| op[0, 1]}.sort.uniq)
 
+  FALSE = 0
+  TRUE = -1
+
   attr_reader :asm
 
   def initialize(input, asm)
@@ -97,6 +100,13 @@ class Compiler
       @value = @look
       get_char
     end
+  end
+
+  # put back the most recently parsed value
+  def backtrack
+    @input.ungetc(@look[0])
+    @value.reverse.each_byte {|i| @input.ungetc(i)}
+    get_char
   end
 
   # Parse and translate an identifier or function call.
@@ -217,7 +227,6 @@ class Compiler
 
   def bit_expression
     arithmetic_expression
-    # XXX need a token of lookahead
     while op?(:bit, @look)
       scan
       case @value
@@ -225,9 +234,8 @@ class Compiler
       when '^': bitxor_expression
       when '&': bitand_expression
       else
-        puts ">> token: #@token"
-        puts ">> value: #@value"
-        raise 'not actually a bit op!'
+        backtrack
+        return
       end
     end
   end
@@ -792,7 +800,9 @@ class Compiler
   # Match literal input.
   def match_word(word, options={})
     scan if options[:scan]
-    expected(word) unless @value == word
+    match = @value == word
+    expected(word) unless match
+    match
   end
 
   # Parse zero or more consecutive characters for which the test is
