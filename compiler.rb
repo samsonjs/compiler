@@ -135,7 +135,7 @@ class Compiler
 
   # Parse and translate a general expression of terms.  Result is
   # in eax.
-  def expression
+  def arithmetic_expression
     term                      # Result is in eax.
 
     while op_char?(@look, :add)
@@ -196,23 +196,40 @@ class Compiler
   # bit expressions #
   ###################
 
-  def bit_expr(op, token)
-    match(token)
-    if block_given? then yield else term end
+  def bit_expression
+    arithmetic_expression
+    # XXX need a token of lookahead
+    while op?(:bit, @look)
+      scan
+      case @value
+      when '|': bitor_expression
+      when '^': bitxor_expression
+      when '&': bitand_expression
+      else
+        puts ">> token: #@token"
+        puts ">> value: #@value"
+        raise 'not actually a bit op!'
+      end
+    end
+  end
+
+  def bit_op(op, token)
+    asm.push(EAX)
+    arithmetic_expression
     asm.pop(EBX)
     asm.send(op, EAX, EBX)
   end
 
-  def bitor_expr
-    bit_expr(:or, '|')
+  def bitor_expression
+    bit_op(:or, '|')
   end
 
-  def xor_expr
-    bit_expr(:xor, '^')
+  def bitxor_expression
+    bit_op(:xor, '^')
   end
 
-  def bitand_expr
-    bit_expr(:and, '&') { signed_factor }
+  def bitand_expression
+    bit_op(:and, '&')
   end
 
 
@@ -277,7 +294,7 @@ class Compiler
   end
 
   def relation
-    expression
+    bit_expression
     if op_char?(@look, :rel)
       scan
       asm.push(EAX)
@@ -299,7 +316,7 @@ class Compiler
   # to effectively return false.  If b - a is non-zero then a != b,
   # and make_boolean will leave -1 (true) for us in eax.
   def neq_relation
-    expression
+    bit_expression
     asm.pop(EBX)
     asm.sub(EAX, EBX)
     make_boolean
@@ -327,7 +344,7 @@ class Compiler
   # true (-1) if the difference was below zero and false (0)
   # otherwise (using JL, jump if less than).
   def cmp_relation(a, b, options={})
-    expression
+    bit_expression
     asm.pop(EBX)
 
     # Invert the sense of the test?
