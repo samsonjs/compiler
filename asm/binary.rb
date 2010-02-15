@@ -834,7 +834,12 @@ module Assembler
 
 
     def and_(dest, src)
-      if rm?(dest, 8) && immediate?(src, 8)
+      if rm?(dest) && register?(src)
+        asm do
+          emit_byte(0x21)
+          emit_modrm(dest, src.regnum)
+        end
+      elsif rm?(dest, 8) && immediate?(src, 8)
         asm do
           emit_byte(0x80)
           emit_modrm(dest, 4)
