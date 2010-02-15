@@ -264,39 +264,63 @@ class Compiler
   # boolean expressions #
   #######################
 
-  def op(name)
-    asm.push(EAX)
-    expected(name) unless match_word(name)
-    yield
-    asm.add(ESP, 4)
-  end
-
   def boolean_expression
     boolean_term
     while @look == '|'
-      op '||' do
-        boolean_term
-        # !!! this method has moved, IMPLEMENT THIS!
-        emit("<logical or>")
-      end
+      scan
+      expected('||') unless match_word('||')
+
+      false_label = asm.mklabel(:false)
+      truthy_label = asm.mklabel(:truthy)
+      done_label = asm.mklabel(:done)
+      
+      asm.cmp(EAX, FALSE)
+      asm.jne(truthy_label)
+
+      boolean_term
+      asm.cmp(EAX, FALSE)
+      asm.je(false_label)
+
+      asm.deflabel(truthy_label)
+      asm.mov(EAX, TRUE)
+      asm.jmp(done_label)
+
+      asm.deflabel(false_label)
+      asm.mov(EAX, FALSE)
+
+      asm.deflabel(done_label)
     end
   end
 
   def boolean_term
     not_factor
     while @look == '&'
-      op '&&' do
-        not_factor
-        # !!! this method has moved, IMPLEMENT THIS!
-        emit("<logical and>")
-      end
+      scan
+      expected('&&') unless match_word('&&')
+      false_label = asm.mklabel(:false)
+      done_label = asm.mklabel(:done)
+      
+      asm.cmp(EAX, FALSE)
+      asm.je(false_label)
+
+      not_factor
+      asm.cmp(EAX, FALSE)
+      asm.je(false_label)
+
+      asm.mov(EAX, TRUE)
+      asm.jmp(done_label)
+
+      asm.deflabel(false_label)
+      asm.mov(EAX, TRUE)
+
+      asm.deflabel(done_label)
     end
   end
 
   def boolean_factor
     if boolean?(@look)
       if get_boolean == 'true'
-        asm.mov(EAX, -1)
+        asm.mov(EAX, TRUE)
       else
         asm.xor(EAX, EAX)
       end
@@ -321,9 +345,9 @@ class Compiler
   # semantically equivalent to !!reg in C or Ruby.
   def make_boolean(reg=EAX)
     end_label = asm.mklabel(:endmakebool)
-    asm.cmp(reg, 0)             # if false do nothing
+    asm.cmp(reg, FALSE)         # if false do nothing
     asm.jz(end_label)
-    asm.mov(reg, -1)            # truthy, make it true
+    asm.mov(reg, TRUE)          # truthy, make it true
     asm.deflabel(end_label)
   end
 
@@ -389,13 +413,13 @@ class Compiler
     asm.cmp(a, b)
     asm.jl(true_label)
 
-    asm.xor(EAX, EAX)          # return false
-    asm.not_(EAX) if invert    # (or true if inverted)
+    asm.mov(EAX, FALSE)           # return false
+    asm.not_(EAX) if invert       # (or true if inverted)
     asm.jmp(end_label)
 
     asm.deflabel(true_label)
-    asm.xor(EAX, EAX)            # return true
-    asm.not_(EAX) unless invert  # (or false if inverted)
+    asm.mov(EAX, FALSE)           # return true
+    asm.not_(EAX) unless invert   # (or false if inverted)
 
     asm.deflabel(end_label)
   end
