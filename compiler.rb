@@ -69,6 +69,9 @@ class Compiler
     elsif newline?(@look)
       skip_any_whitespace
       scan
+    elsif comment_char?(@look)
+      skip_comment
+      scan
     else
       # XXX default to single char op... should probably raise.
       @token = :op
@@ -737,6 +740,10 @@ class Compiler
     char == "\n" || char == "\r"
   end
 
+  def comment_char?(char)
+    char == '#'
+  end
+
   def any_whitespace?(char)
     whitespace?(char) || newline?(char)
   end
@@ -817,7 +824,12 @@ class Compiler
     get_char while any_whitespace?(@look)
   end
 
-  
+  def skip_comment
+    get_char until newline?(@look)
+    skip_any_whitespace
+  end
+
+
   def indent
     real_indent = if @value == 'else' || @value == 'end'
                     @indent - 1
