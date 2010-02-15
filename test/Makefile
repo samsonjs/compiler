@@ -11,7 +11,7 @@ ifeq ($(BINFORMAT), bin)
 	@echo "         Your platform, " $(PLATFORM) ", is unsupported."
 endif
 
-all: lt gt ge le eq neq if while until repeat for do break print big huge
+all: lt gt ge le eq neq or and if while until repeat for do break print big huge
 	@true
 
 lt: test.rb test_lt.code
@@ -62,10 +62,20 @@ big: test.rb test_big.code
 huge: test.rb test_huge.code
 	@./test.rb huge $(BINFORMAT)
 
+or: test.rb test_or.code
+	@./test.rb or $(BINFORMAT)
+
+and: test.rb test_and.code
+	@./test.rb and $(BINFORMAT)
+
+bit_ops: test.rb test_bit_ops.code
+	@./test.rb bit_ops $(BINFORMAT)
+
 clean:
 	@rm -f test*.asm test*.o
 	@rm -f test_big test_lt test_gt test_ge test_le test_eq test_neq
 	@rm -f test_while test_if test_until test_repeat test_do
 	@rm -f test_for test_break test_print test_huge
+	@rm -f test_and test_or test_bit_ops
 
 .PHONY: clean
