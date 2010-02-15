@@ -33,7 +33,26 @@ class Compiler
     'else'   => nil,
     'end'    => nil
   }
-  
+
+  # Grouped by precedence.
+  Ops = {
+    :add    => %w[+ -],
+    :mul    => %w[* /],
+    :rel    => %w[== != < > <= >=],
+    :or     => %w[||],
+    :and    => %w[&&],
+    :bit    => %w[| ^ &],
+    :unary  => %w[- +]
+  }
+  # Op chars are chars that can begin an op, so OpChars needs to be a
+  # map of kinds of operators to a list of valid prefix chars.
+  OpChars = Ops.inject({}) { |hash, kv|
+    key, val = *kv
+    hash[key] = val.map {|op| op[0, 1]} # slice off first char for each op
+    hash
+  # Include :all for a very general test.
+  }.merge(:all => Ops.values.flatten.map{|op| op[0, 1]}.sort.uniq)
+
   attr_reader :asm
 
   def initialize(input, asm)
@@ -236,6 +255,13 @@ class Compiler
   #######################
   # boolean expressions #
   #######################
+
+  def op(name)
+    asm.push(EAX)
+    expected(name) unless match_word(name)
+    yield
+    asm.add(ESP, 4)
+  end
 
   def boolean_expression
     boolean_term
@@ -673,25 +699,6 @@ class Compiler
     @input.eof? && @look.nil?
   end
 
-  Ops = {
-    :add    => %w[+ -],
-    :mul    => %w[* /],
-    :rel    => %w[== != < > <= >=],
-    :or     => %w[||],
-    :and    => %w[&&],
-    :bitor  => %w[| ^],
-    :bitand => %w[&],
-    :unary  => %w[- +]
-  }
-  # Op chars are chars that can begin an op, so OpChars needs to be a
-  # map of kinds of operators to a list of valid prefix chars.
-  OpChars = Ops.inject({}) { |hash, kv|
-    key, val = *kv
-    hash[key] = val.map {|op| op[0, 1]} # slice off first char for each op
-    hash
-  # Include :all for a very general test.
-  }.merge(:all => Ops.values.flatten.map{|op| op[0, 1]}.sort.uniq)
-
   def op_char?(char, kind=:all)
     OpChars[kind].include?(char)
   end
@@ -708,7 +715,7 @@ class Compiler
               @input.readbyte.chr 
             end
   end
-
+  
   # Report error and halt
   def abort(msg)
     raise ParseError, msg
@@ -744,8 +751,9 @@ class Compiler
   end
 
   # XXX disabled! ... should treat true/false as constants
+  #     once again we need a token of lookahead
   def boolean?(char)
-    char == 't' || char == 'f'
+    #char == 't' || char == 'f'
     false
   end
 
@@ -776,7 +784,7 @@ class Compiler
   # Match literal input.
   def match(char)
     expected(char, :got => @look) unless @look == char
-    # puts "[ch] #{indent}#{char}"
+#     puts "[ch] #{indent}#{char}"
     get_char
     skip_whitespace
   end
@@ -862,14 +870,6 @@ class Compiler
     asm.add(ESP, 4)
   end
 
-  def op(name)
-    asm.push(EAX)
-    get_op
-    expected(name) unless match_word(name)
-    yield
-    asm.add(ESP, 4)
-  end
-
 
   class <<self
     def hook(callback, *methods)
@@ -918,7 +918,7 @@ class Compiler
     @label_stack.pop
   end
 
-  # hook(:print_token,
-  #   :get_name, :get_newline, :get_number, :get_op, :get_boolean)
+#   hook(:print_token,
+#     :get_name, :get_newline, :get_number, :get_op, :get_boolean)
 
 end
