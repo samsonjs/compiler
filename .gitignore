@@ -3,21 +3,4 @@
 trash
 test/*.o
 test/*.asm
-
-# TODO just ignore test/bin/* or similar
-test/test_big
-test/test_lt
-test/test_gt
-test/test_ge
-test/test_le
-test/test_eq
-test/test_neq
-test/test_while
-test/test_if
-test/test_until
-test/test_repeat
-test/test_do
-test/test_for
-test/test_break
-test/test_print
-test/test_huge
+test/bin/*

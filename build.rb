@@ -6,7 +6,7 @@ require 'asm/binary'
 require 'asm/machosymtab'
 require 'asm/machofile'
 
-# usage: build.rb <filename> [elf | macho ] [asm | bin]
+# usage: build.rb <filename> [output filename] [elf | macho ] [asm | bin]
 
 DefaultBinFormats = Hash.new('bin')
 def binformat(p,f) DefaultBinFormats[p]=f end
@@ -14,12 +14,13 @@ binformat 'darwin', 'macho'
 binformat 'linux',  'elf'
 
 def main
-  filename = ARGV[0].to_s
+  filename = ARGV.shift.to_s
   raise "can't read #{filename}" unless File.readable?(filename)
+  outdir = ARGV.shift || '.'
   platform = `uname -s`.chomp.downcase
   binformat = ARGV[1] ? ARGV[1].downcase : DefaultBinFormats[platform]
   puts "Building #{filename} for #{platform}, binformat is #{binformat} ..."
-  outfile = build(filename, platform, binformat)
+  outfile = build(filename, outdir, platform, binformat)
   puts outfile
   exit
 end
@@ -72,7 +73,7 @@ def assemble(filename, binformat='elf')
 end
 
 # link with ld, return resulting filename.
-def link(filename, platform='linux')
+def link(filename, outdir, platform='linux')
   f = base(filename)
   cmd, args = *case platform
                when 'darwin': ['gcc', '-arch i386']
@@ -85,8 +86,8 @@ def link(filename, platform='linux')
   return f
 end
 
-def build(filename, platform='linux', binformat='elf')
-  objfile = base(filename) + '.o'
+def build(filename, outdir, platform='linux', binformat='elf')
+  objfile = File.join(outdir, base(filename) + '.o')
   symtab, objwriter_class =
     case binformat
     when 'elf':   [Assembler::ELFSymtab.new, Assembler::ELFFile]
@@ -95,7 +96,7 @@ def build(filename, platform='linux', binformat='elf')
       raise "unsupported binary format: #{binformat}"
     end
   compile(filename, objfile, Assembler::Binary.new(platform, symtab, objwriter_class))
-  exefile = link(objfile, platform)
+  exefile = link(objfile, outdir, platform)
   return exefile
 end
 

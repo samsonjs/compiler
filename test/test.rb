@@ -5,15 +5,16 @@ $LOAD_PATH << ROOT
 
 require 'build'
 
-# usage: test.rb <func> [binformat] [format]
+# usage: test.rb <func> [outdir] [binformat] [format]
 
 def main
-  func = ARGV[0].to_s
-  binformat = ARGV[1] ? ARGV[1].downcase : 'elf'
-  format = ARGV[2] ? ARGV[2].downcase : 'asm'
+  func = ARGV.shift
+  outdir = ARGV.shift || '.'
+  binformat = (ARGV.shift || 'elf').downcase
+  format = (ARGV.shift || 'asm').downcase
   platform = `uname -s`.chomp.downcase
   print "testing #{func} ... "
-  success = run( build("test_#{func}.code", platform, binformat) )
+  success = run( build("test_#{func}.code", outdir, platform, binformat) )
   if success == 0
     puts "pass"
   else
