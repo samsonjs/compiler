@@ -851,6 +851,23 @@ module Assembler
     end
     alias_method :and, :and_
 
+    def or_(dest, src)
+      if rm?(dest) && register?(src)
+        asm do
+          emit_byte(0x9)
+          emit_modrm(dest, src.regnum)
+        end
+      elsif rm?(dest, 8) && immediate?(src, 8)
+        asm do
+          emit_byte(0x80)
+          emit_modrm(dest, 1)
+          emit_byte(src)
+        end
+      else
+        raise "unsupported OR instruction: dest=#{dest.inspect}, src=#{src.inspect}"
+      end
+    end
+    alias_method :or, :or_
 
     def xor(dest, src)
       # xor r/m32, reg32
