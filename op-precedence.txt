@@ -1,0 +1,25 @@
+keyword := 'if' | 'while' | 'until' | 'repeat' | 'for' | 'do' | 'break' |
+           'print' | 'else' | 'end'
+identifier := /[a-zA-Z][[:alnum:]]+/
+number := /\d+/
+boolean-literal := 'true' | 'false'
+
+factor := '(' boolean-expression ')' | identifier | number
+signed-factor := '-' factor | '+' factor | factor
+term := signed-factor (/[*/]/ signed-factor)*
+arithmetic-expression := term (/[-+]/ term)*
+
+bit-op := '|' | '&' | '^'
+bit-expression := arithmetic-expression (bit-op arithmetic-expression)*
+
+rel-op := '==' | '!=' | '>' | '>=' | '<' | '<='
+relation := bit-expression (rel-op bit-expression)*
+
+boolean-factor := boolean-literal | relation
+not-factor := '!' boolean-factor | boolean-factor
+boolean-term := not-factor ('&&' not-factor)*
+boolean-expression := boolean-term ('||' boolean-term)*
+
+assignment := identifier '=' boolean-expression
+
+expression := assignment | boolean-expression
