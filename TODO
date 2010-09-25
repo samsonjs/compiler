@@ -1,0 +1,51 @@
+
+ Types / Classes
+ ===============
+
+ * functions
+ * objects (everything an object)
+ * classes
+ * symbols
+ * strings
+ * lambdas
+ * lists
+ * floats
+ * full numeric tower
+ * vectors
+ * dict
+
+
+ Features
+ ========
+
+ * built-in http support
+ * blocks (multiple)
+ * docstrings
+ * list comprehensions
+ * immutable data structures
+ * advice (aka AOP)
+ * decorators
+ * low-level hardware access
+ * inline asm (?)
+ * threads
+ * erlang style threads (as a lib?)
+
+ Syntax
+ ======
+
+ * regex literals
+ * dot for attribute access
+ * space to send a message, args in parens
+   (parens optional w/ no args)
+
+
+ Other
+ =====
+
+ * parser hooks/functions (like Factor's parsing words)
+
+ * gc
+ * ffi
+
+ * JIT compiler
+ * optimizations

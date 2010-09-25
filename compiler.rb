@@ -18,7 +18,7 @@ class ParseError < StandardError
 end
 
 class Compiler
-
+  
   include Assembler::Registers
 
   Keywords = {
