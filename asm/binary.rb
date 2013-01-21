@@ -637,8 +637,10 @@ module Assembler
       if register?(dest)
 
         opcode = case
-                 when rm?(src, :byte): 0xb6 # movzx Gv, Eb
-                 when rm?(src, :word): 0xb7 # movzx Gv, Ew
+                 when rm?(src, :byte)
+                   0xb6 # movzx Gv, Eb
+                 when rm?(src, :word)
+                   0xb7 # movzx Gv, Ew
                  else
                    raise "unsupported MOVZX instruction, dest=#{dest.inspect} << src=#{src.inspect} >>"
                  end

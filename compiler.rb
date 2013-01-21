@@ -156,8 +156,10 @@ class Compiler
     while op?(:mul, @look)
       asm.push(EAX)
       case @look
-      when '*': multiply
-      when '/': divide
+      when '*'
+        multiply
+      when '/'
+        divide
       end
     end
   end
@@ -170,8 +172,10 @@ class Compiler
     while op_char?(@look, :add)
       asm.push(EAX)
       case @look
-      when '+': add
-      when '-': subtract
+      when '+'
+        add
+      when '-'
+        subtract
       end
     end
   end
@@ -230,9 +234,12 @@ class Compiler
     while op?(:bit, @look)
       scan
       case @value
-      when '|': bitor_expression
-      when '^': bitxor_expression
-      when '&': bitand_expression
+      when '|'
+        bitor_expression
+      when '^'
+        bitxor_expression
+      when '&'
+        bitand_expression
       else
         backtrack
         return
@@ -357,12 +364,18 @@ class Compiler
       scan
       asm.push(EAX)
       case @value
-      when '==': eq_relation
-      when '!=': neq_relation
-      when '>': gt_relation
-      when '>=': ge_relation
-      when '<': lt_relation
-      when '<=': le_relation
+      when '=='
+        eq_relation
+      when '!='
+        neq_relation
+      when '>'
+        gt_relation
+      when '>='
+        ge_relation
+      when '<'
+        lt_relation
+      when '<='
+        le_relation
       end
     end
   end
@@ -921,12 +934,18 @@ class Compiler
 
   def print_token
     print(case @token
-          when :keyword: '[kw] '
-          when :number: '[nu] '
-          when :identifier: '[id] '
-          when :op: '[op] '
-          when :boolean: '[bo] '
-          when :newline: ''
+          when :keyword
+            '[kw] '
+          when :number
+            '[nu] '
+          when :identifier
+            '[id] '
+          when :op
+            '[op] '
+          when :boolean
+            '[bo] '
+          when :newline
+            ''
           else
             raise "print doesn't know about #{@token}: #{@value}"
           end)

@@ -76,8 +76,10 @@ end
 def link(filename, outdir, platform='linux')
   f = base(filename)
   cmd, args = *case platform
-               when 'darwin': ['gcc', '-arch i386']
-               when 'linux': ['ld', '']
+               when 'darwin'
+                 ['gcc', '-arch i386']
+               when 'linux'
+                 ['ld', '']
                else
                  raise "unsupported platform: #{platform}"
                end
@@ -90,8 +92,10 @@ def build(filename, outdir, platform='linux', binformat='elf')
   objfile = File.join(outdir, base(filename) + '.o')
   symtab, objwriter_class =
     case binformat
-    when 'elf':   [Assembler::ELFSymtab.new, Assembler::ELFFile]
-    when 'macho': [Assembler::MachOSymtab.new, Assembler::MachOFile]
+    when 'elf'
+      [Assembler::ELFSymtab.new, Assembler::ELFFile]
+    when 'macho'
+      [Assembler::MachOSymtab.new, Assembler::MachOFile]
     else
       raise "unsupported binary format: #{binformat}"
     end

@@ -358,8 +358,10 @@ module Assembler
 
     def segname_based_on_filetype(segname)
       case @header[:filetype]
-      when MH_OBJECT: ''
-      when MH_EXECUTE: segname
+      when MH_OBJECT
+        ''
+      when MH_EXECUTE
+        segname
       else
         raise "unsupported MachO file type: #{@header.inspect}"
       end
