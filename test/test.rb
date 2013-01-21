@@ -10,6 +10,7 @@ require 'build'
 def main
   func = ARGV.shift
   outdir = ARGV.shift || '.'
+  Dir.mkdir(outdir) unless File.exists?(outdir)
   binformat = (ARGV.shift || 'elf').downcase
   format = (ARGV.shift || 'asm').downcase
   platform = `uname -s`.chomp.downcase
