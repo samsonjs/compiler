@@ -467,16 +467,27 @@ module Assembler
     #
     # XXX This method is pretty ugly.
     def rm?(op, size=DefaultOperandSize)
-      # register
-      register?(op, size) ||
-        
+      is_register = register?(op, size)
+
+      if op.is_a?(Array)
+        case op.size
+
         # [register/memory]
-        (op.is_a?(Array) && op.size == 1 &&
-         [Numeric, RegisterProxy, VariableProxy].any?{|c| c == op[0].class}) ||
+        when 1
+          is_reg_or_mem = [Numeric, RegisterProxy, VariableProxy].include?(op[0].class)
 
         # [<size>, memory]
-        (op.is_a?(Array) && op.size == 2 && op[0] == size &&
-         [Numeric, RegisterProxy, VariableProxy].any?{|c| c == op[1].class})
+        when 2
+          is_size_and_mem = op[0] == size && [Numeric, RegisterProxy, VariableProxy].include?(op[1].class)
+
+        end
+
+      else
+        is_reg_or_mem = false
+        is_size_and_mem = false
+      end
+
+      is_register || is_reg_or_mem || is_size_and_mem
     end
 
     def offset?(addr, size=DefaultOperandSize)
