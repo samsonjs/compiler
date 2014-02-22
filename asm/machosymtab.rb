@@ -3,9 +3,9 @@ require 'asm/machosym'
 require 'asm/symtab'
 
 module Assembler
-  
+
   class MachOSymtab < Symtab
-    
+
     include MachO
 
     def make_symbols(vars, base_addr, type, segnum)
@@ -23,7 +23,7 @@ module Assembler
       # - All labels are exported.  This should be changed and only functions exported!
 
       section = 1
-      
+
       # Functions (section #1, __text)
       symbols = make_symbols(@labels, text_offset, N_SECT | N_EXT, section)
       section += 1
@@ -46,7 +46,7 @@ module Assembler
     def bss_section
       @consts.size > 0 ? 3 : 2
     end
-    
+
     def nlist_ary
       symbols = {}
       strx = 1
@@ -61,7 +61,7 @@ module Assembler
       end
       return ary
     end
-    
+
     def stab
       # The empty strings result in a string that begins and ends with a null byte
       ['', all_symbols, ''].flatten.map { |sym| sym.to_s }.join("\0")
@@ -84,5 +84,5 @@ module Assembler
     end
 
   end
-  
+
 end

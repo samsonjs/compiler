@@ -4,7 +4,7 @@
 # subclassed just like any other class.  A nice side-effect of this
 # syntax is that it is always clear that a CStruct is just a class and
 # instances of the struct are objects.
-#    
+#
 # Some light metaprogramming is used to make the following syntax possible:
 #
 # class MachHeader < CStruct
@@ -21,12 +21,12 @@
 #   uint32 :cmd
 #   uint32 :cmdsize
 # end
-# 
+#
 # # inherits cmd and cmdsize as the first 2 fields
 # class SegmentCommand < LoadCommand
 #   string :segname, 16
 #   uint32 :vmaddr
-#   uint32 
+#   uint32
 # end
 #
 # Nothing tricky or confusing there.  Members of a CStruct class are
@@ -56,7 +56,7 @@ class CStruct
   ###################
   # Class Constants #
   ###################
-  
+
   # Size in bytes.
   SizeMap = {
     :int8   => 1,
@@ -89,7 +89,7 @@ class CStruct
     :uint   => 'I',
     :char   => 'C'
   }
-  
+
   # Only needed when unpacking is different from packing, i.e. strings w/ lambdas in PackMap.
   UnpackMap = {
     :string => lambda do |str, *opts|
@@ -99,11 +99,11 @@ class CStruct
                         val
                       end
   }
-  
+
   ##########################
   # Class Instance Methods #
   ##########################
-  
+
   # Note: const_get and const_set are used so the constants are bound
   #       at runtime, to the real class that has subclassed CStruct.
   #       I figured Ruby would do this but I haven't looked at the
@@ -112,31 +112,31 @@ class CStruct
   #       All of this could probably be avoided with Ruby 1.9 and
   #       private class variables.  That is definitely something to
   #       experiment with.
-  
+
   class <<self
-    
+
     def inherited(subclass)
       subclass.instance_eval do
-        
+
         # These "constants" are only constant references.  Structs can
         # be modified.  After the struct is defined it is still open,
         # but good practice would be not to change a struct after it
         # has been defined.
-        # 
+        #
         # To support inheritance properly we try to get these
         # constants from the enclosing scope (and clone them before
         # modifying them!), and default to empty, er, defaults.
-        
+
         members = const_get(:Members).clone rescue []
         member_index = const_get(:MemberIndex).clone rescue {}
         member_sizes = const_get(:MemberSizes).clone rescue {}
         member_opts = const_get(:MemberOptions).clone rescue {}
-        
+
         const_set(:Members, members)
         const_set(:MemberIndex, member_index)
         const_set(:MemberSizes, member_sizes)
         const_set(:MemberOptions, member_opts)
-        
+
       end
     end
 
@@ -144,7 +144,7 @@ class CStruct
     # Define a method for each size name, and when that method is called it updates
     # the struct class accordingly.
     SizeMap.keys.each do |type|
-      
+
       define_method(type) do |name, *args|
         name = name.to_sym
         const_get(:MemberIndex)[name] = const_get(:Members).size
@@ -152,21 +152,21 @@ class CStruct
         const_get(:MemberOptions)[name] = args
         const_get(:Members) << name
       end
-      
+
     end
-    
-    
+
+
     # Return the number of members.
     def size
       const_get(:Members).size
     end
     alias_method :length, :size
-    
+
     # Return the number of bytes occupied in memory or on disk.
     def bytesize
       const_get(:Members).inject(0) { |size, name| size + sizeof(name) }
     end
-        
+
     def sizeof(name)
       value = SizeMap[const_get(:MemberSizes)[name]]
       value.respond_to?(:call) ? value.call(*const_get(:MemberOptions)[name]) : value
@@ -178,14 +178,14 @@ class CStruct
     end
 
   end
-  
+
 
   ####################
   # Instance Methods #
   ####################
-  
+
   attr_reader :values
-  
+
   def initialize(*args)
     @values = args
   end
@@ -199,7 +199,7 @@ class CStruct
         [vals.shift].pack(patt)
       else
         patt.call(vals.shift, *member_options[name])
-      end      
+      end
     end.join
   end
 
@@ -218,47 +218,47 @@ class CStruct
     end
     self
   end
-  
+
   def pack_pattern
     members.map { |name| PackMap[member_sizes[name]] }
   end
-  
+
   def unpack_pattern
     members.map { |name| UnpackMap[member_sizes[name]] || PackMap[member_sizes[name]] }
   end
-  
+
   def [](name_or_idx)
     case name_or_idx
-      
+
     when Numeric
       idx = name_or_idx
       @values[idx]
-      
+
     when String, Symbol
       name = name_or_idx.to_sym
       @values[member_index[name]]
-      
+
     else
       raise ArgumentError, "expected name or index, got #{name_or_idx.inspect}"
     end
   end
-  
+
   def []=(name_or_idx, value)
     case name_or_idx
-      
+
     when Numeric
       idx = name_or_idx
       @values[idx] = value
-      
+
     when String, Symbol
       name = name_or_idx.to_sym
       @values[member_index[name]] = value
-      
+
     else
       raise ArgumentError, "expected name or index, got #{name_or_idx.inspect}"
     end
   end
-  
+
   def ==(other)
     puts @values.inspect
     puts other.values.inspect
@@ -270,16 +270,16 @@ class CStruct
   def each(&block)
     @values.each(&block)
   end
-  
+
   def each_pair(&block)
     members.zip(@values).each(&block)
   end
-  
+
   def size
     members.size
   end
   alias_method :length, :size
-  
+
   def sizeof(name)
     self.class.sizeof(name)
   end
@@ -296,21 +296,21 @@ class CStruct
   def members
     self.class::Members
   end
-  
+
   def member_index
     self.class::MemberIndex
   end
-  
+
   def member_sizes
     self.class::MemberSizes
   end
- 
+
   def member_options
     self.class::MemberOptions
   end
- 
+
   # The last expression is returned, so return self instead of junk.
-  self  
+  self
 end
 
 

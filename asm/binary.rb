@@ -1,7 +1,7 @@
 # A very basic x86 assembler library for Ruby.  Generally the
 # instructions implemented are the minimum needed by the compiler this
 # is written for.  x86 is just too big.
-# 
+#
 # sjs
 # may 2009
 #
@@ -23,7 +23,7 @@ module Assembler
     DEBUG_OUTPUT = false
 
     # 0.size gives the real answer, we only do x86-32 though
-    MachineBytes = 4    
+    MachineBytes = 4
     MachineBits = MachineBytes * 8
     MinSigned = -1 * 2**(MachineBits-1)
     MaxSigned = 2**(MachineBits-1) - 1
@@ -65,7 +65,7 @@ module Assembler
       @symtab = symtab
       @objwriter_class = objwriter_class
       # @objwriter = objwriter
-      
+
       # Almost a byte array, except for addresses.
       #
       # Addresses take the form [:<type>, <name>]
@@ -96,7 +96,7 @@ module Assembler
       X86_exit[@platform].each {|byte| emit_byte(byte)}
 
       byte_array = resolve_labels
-      
+
       #puts "1st pass: " + byte_array.inspect if DEBUG_OUTPUT
 
       binary = package(byte_array)
@@ -114,7 +114,7 @@ module Assembler
       # outline:
       #  - resolve all variable proxies in @proxies replacing
       #    the 4 bytes (0xff) with the real address
-      
+
       bss_offset = @symtab.bss_offset
       const_offset = @symtab.const_offset
       @proxies.each do |i, proxy|
@@ -197,7 +197,7 @@ module Assembler
     def label?(x)
       x.is_a?(Array) && x[0] == :label
     end
-    
+
     # XXX this should probably evaluate the value somehow
     def defconst(name, bytes, value)
       @symtab.defconst(name, bytes, value)
@@ -247,18 +247,18 @@ module Assembler
     def asm
       # stash the current number of bytes written
       instruction_offset = @ip
-      
+
       print "0x#{@ip.to_s(16).rjust(4, '0')}\t" if DEBUG_OUTPUT
 
       yield
-      
+
       # return the number of bytes written
       @ip - instruction_offset
-      
+
       puts if DEBUG_OUTPUT
     end
-    
-    
+
+
     def emit_byte(byte)
 
       ##### The joke's on me! Array#pack('c*') already does this.  It is nice to see
@@ -276,12 +276,12 @@ module Assembler
 
       # make sure it's a byte
       raise "not a byte: #{byte.inspect}" unless byte == byte & 0xff
-      
+
       byte = byte & 0xff
       ###  end of pointless code
-      
+
       print (byte >= 0 && byte < 0x10 ? '0' : '') + byte.to_s(16) + ' ' if DEBUG_OUTPUT
-      
+
       @ir << byte
       @ip += 1
     end
@@ -314,7 +314,7 @@ module Assembler
     def emit_dword(num)
       num_to_quad(num).each { |byte| emit_byte(byte) }
     end
-    
+
     def mklabel(suffix=nil)
       @symtab.unique_label(suffix)
     end
@@ -372,7 +372,7 @@ module Assembler
               mod = 1
               disp8 = eff_addr.index
 
-            # disp32, mod == 10  
+            # disp32, mod == 10
             elsif SignedRange === eff_addr.index
               mod = 2
               disp32 = eff_addr.index
@@ -501,7 +501,7 @@ module Assembler
 
     def log2(x, tol=1e-13)
       result = 0.0
-      
+
       # Integer part
       while x < 1
         resultp -= 1
@@ -511,7 +511,7 @@ module Assembler
         result += 1
         x /= 2
       end
-      
+
       # Fractional part
       fp = 1.0
       while fp >= tol
@@ -521,7 +521,7 @@ module Assembler
           x /= 2
           result += fp
         end
-      end 
+      end
       result
     end
 
@@ -537,14 +537,14 @@ module Assembler
     #   6.  mov reg8, r/m8
     #   7.  mov r/m8, imm8
     def mov(dest, src)
-      
+
       # These 2 are used in the same way, just the name differs to make the
       # meaning clear.  They are 4-byte values that are emited at the end if
       # they are non-nil.  Only one of them will be emited, and if both are
       # non-nil that one is immediate.
       immediate = nil
       offset = nil
-      
+
       # This is an array of arguments to be passed to emit_modrm, if it is set.
       modrm = nil
 
@@ -580,7 +580,7 @@ module Assembler
         opcode = 0xc7
         modrm = [dest, 0]
         immediate = src
-      
+
       # version 5: mov r/m8, r8
       elsif rm?(dest, :byte) && register?(src, :byte)
         opcode = 0x88
@@ -627,12 +627,12 @@ module Assembler
           emit_byte(immediate_byte)
 
         end
-      end    
+      end
     end
 
 
     def movzx(dest, src)
-      
+
       # movzx Gv, ??
       if register?(dest)
 
@@ -648,10 +648,10 @@ module Assembler
           emit_byte(0x0f)
           emit_byte(opcode)
           emit_modrm(src, dest.regnum)
-        end      
-      
+        end
+
       else
-        
+
         raise "unimplemented MOVZX instruction, << dest=#{dest.inspect} >> src=#{src.inspect}"
       end
     end
@@ -700,21 +700,21 @@ module Assembler
            emit_modrm(dest, 0)
            emit_dword(src)
          end
-      
+
       # add eax, imm32
       elsif dest == EAX && immediate?(src)
         asm do
           emit_byte(0x05)
           emit_dword(src)
         end
-      
+
       # add reg32, r/m32
       elsif register?(dest) && rm?(src)
         asm do
           emit_byte(0x03)
           emit_modrm(src, dest.regnum)
         end
-      
+
       else
         raise "unsupported ADD instruction, dest=#{dest.inspect} src=#{src.inspect}"
       end
@@ -729,7 +729,7 @@ module Assembler
           emit_modrm(dest, 5)
           emit_byte(src)
         end
-        
+
       # sub r/m32, imm32
       elsif rm?(dest) && immediate?(src)
         asm do
@@ -737,7 +737,7 @@ module Assembler
           emit_modrm(dest, 5)
           emit_dword(src)
         end
-      
+
       # sub r/m32, reg32
       elsif rm?(dest) && register?(src)
         asm do
@@ -803,8 +803,8 @@ module Assembler
         end
       end
     end
-    
-    
+
+
     def dec(op)
       if register?(op)
         # dec reg32
@@ -827,7 +827,7 @@ module Assembler
           emit_modrm(op, 5)
           emit_byte(n)
         end
-                  
+
       else
         raise "unsupported SHR instruction, op=#{op.inspect}, n=#{n.inspect}"
       end
@@ -878,18 +878,18 @@ module Assembler
           emit_byte(0x31)
           emit_modrm(dest, src.regnum)
         end
-        
+
       else
         raise "unsupported XOR instruction, dest=#{dest.inspect} src=#{src.inspect}"
       end
     end
-  
-  
+
+
     def not_(op)
       group3(op, 2, 'NOT')
     end
     alias_method :not, :not_
-  
+
 
     def neg(op)
       group3(op, 3, 'NEG')
@@ -900,19 +900,19 @@ module Assembler
       # push reg32
       if register?(op)
         asm { emit_byte(0x50 + op.regnum) }
-        
+
       elsif immediate?(op, :byte)
         asm do
           emit_byte(0x6a)
           emit_byte(op)
         end
-        
+
       elsif immediate?(op)
         asm do
           emit_byte(0x68)
           emit_dword(op)
         end
-      
+
       else
         raise "unsupported PUSH instruction: op=#{op.inspect}"
       end
@@ -923,7 +923,7 @@ module Assembler
       # pop reg32
       if register?(op)
         asm { emit_byte(0x58 + op.regnum) }
-        
+
       else
         raise "unsupported POP instruction: op=#{op.inspect}"
       end
@@ -937,14 +937,14 @@ module Assembler
           emit_byte(0x39)
           emit_modrm(op1, op2.regnum)
         end
-      
+
       # cmp eax, imm32
       elsif op1 == EAX && immediate?(op2)
         asm do
           emit_byte(0x3d)
           emit_dword(op2)
         end
-        
+
       else
         raise "unsupported CMP instruction: op1=#{op1.inspect} op2=#{op2.inspect}"
       end
@@ -977,7 +977,7 @@ module Assembler
 
     # Only Jcc rel32 is supported.
     def jcc(instruction, label)
-      opcode = JccOpcodeMap[instruction]      
+      opcode = JccOpcodeMap[instruction]
       asm do
         emit_byte(0x0f)
         emit_byte(opcode)
@@ -1025,7 +1025,7 @@ module Assembler
       unless SignedByte === delta
         raise "LOOP can only jump -128 to 127 bytes, #{label} is #{delta} bytes away"
       end
-      
+
       asm do
         emit_byte(0xe2)
         emit_byte(delta)
@@ -1035,10 +1035,10 @@ module Assembler
 
 
     # Opcode group #3.  1-byte opcode, 1 operand (r/m8 or r/m32).
-    # 
+    #
     # Members of this group are: DIV, IDIV, MUL, IMUL, NEG, NOT, and TEST.
     def group3(op, reg, instruction)
-      opcode = 
+      opcode =
         if rm?(op, 8)
           0xf6
         elsif rm?(op)
@@ -1055,5 +1055,5 @@ module Assembler
 
 
   end # class Binary
-  
+
 end # module Assembler

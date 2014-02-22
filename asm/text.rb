@@ -1,5 +1,5 @@
 # A subset of x86 assembly.
-# 
+#
 # sjs
 # may 2009
 
@@ -174,7 +174,7 @@ module Assembler
       def int(num)
         emit("int 0x#{num.to_s(16)}")
       end
-      
+
       def cdq
         emit("cdq")
       end

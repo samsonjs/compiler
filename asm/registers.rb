@@ -1,9 +1,9 @@
 require 'asm/regproxy'
 
 module Assembler
-  
+
   module Registers
-    
+
     # This structure allows for x86 registers of all sizes.  The
     # number of the register is the index of the array in which it was
     # found.  The size of a register in bytes is 2 ** index-into-sub-array.
@@ -25,8 +25,8 @@ module Assembler
         const_set(name, RegisterProxy.new(reg, 8 * (2 ** i), regnum))
       end
     end
-    
-    
+
+
   end
-  
+
 end

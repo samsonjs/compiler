@@ -1,5 +1,5 @@
 module Assembler
-  
+
   # Wrap a variable's address so that we can perform arithmetic on it
   # before resolving it when we know where things will go in memory.
   # All we do is catch arithmetic ops and then provide a means to
@@ -10,7 +10,7 @@ module Assembler
 
     attr_reader :name
     attr_accessor :ops
-    
+
     def initialize(name, const=false)
       @name = name
       @const = const
@@ -31,7 +31,7 @@ module Assembler
         addr.send(*op)
       end
     end
-  
+
     def const?
       @const
     end

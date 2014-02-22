@@ -1,18 +1,18 @@
 require 'asm/macho'
 
 module Assembler
-  
+
   class MachOFile
-    
+
     include MachO
-    
+
     attr_accessor :header, :load_commands, :sections, :data
     attr_accessor :current_segment
-    
+
     def initialize(filetype=MH_OBJECT)
       @header = MachHeader.new(MH_MAGIC, CPU_TYPE_X86, CPU_SUBTYPE_X86_ALL, filetype, 0, 0, 0)
       @load_commands = []              # All defined segments.
-      @sections = {}                   # Map of segment names to lists of sections. 
+      @sections = {}                   # Map of segment names to lists of sections.
       @section_disk_size = Hash.new(0) # Sections store their VM size so we need their sizes on disk.
       @section_offset = 0              # Offset of the next section's data, in bytes.
       @data = []                       # Blobs of data that appear at the end of the file.
@@ -38,28 +38,28 @@ module Assembler
     def load_command(cmdtype)
       struct = LoadCommandStructMap[cmdtype]
       unless struct
-        raise "unsupported load command type: #{cmdtype.inspect}," + 
+        raise "unsupported load command type: #{cmdtype.inspect}," +
               " supported types: #{LoadCommandStructMap.keys.sort.inspect}"
       end
-      
+
       # Fill in all the unknown fields with 0, this is nonsense for
       # string fields but that doesn't really matter.
       dummy_vals = [0] * (struct::Members.size - 2)
-      
+
                          #   cmd        cmdsize          ...
       command = struct.new(cmdtype, struct.bytesize, *dummy_vals)
-      
+
       @load_commands << command
-      
+
       @header[:ncmds] += 1
       @header[:sizeofcmds] += command.bytesize
-      
+
       yield(command) if block_given?
-      
+
       return command
     end
 
-    
+
     # Define a segment in this file.  If a block is given it is passed
     # the new segment.  You can chain calls to segment, it returns self.
     #
@@ -84,25 +84,25 @@ module Assembler
     # them in the segment that they name.
     def section(name, segname, data='', vmsize=data.size,
                 segment=@current_segment, type=S_REGULAR)
-      
+
       # Create the new section.
       section = Section.new(name, segname, @section_offset, vmsize, 0, 0, 0, 0, 0, 0, type)
-      
+
       # Add this section to the map of segment names to sections.
       (@sections[segment[:segname]] ||= []) << section
       @section_disk_size[name] = data.size
       @section_offset += data.size
       @data << data if data.size > 0
-      
+
       # Update the header.
       @header[:sizeofcmds] += section.bytesize
-      
+
       # Update the segment.
       segment[:nsects] += 1
       segment[:cmdsize] += section.bytesize
 
       yield(section) if block_given?
-      
+
       return section
     end
 
@@ -119,7 +119,7 @@ module Assembler
     #
     # For MH_EXECUTE files the text section goes under the segment with the
     # name given (__TEXT).
-    
+
     def text(data, sectname='__text', segname='__TEXT')
       real_segname = nil
       unless @current_segment
@@ -129,7 +129,7 @@ module Assembler
           seg[:initprot] = VM_PROT_READ | VM_PROT_EXECUTE
         end
       end
-      
+
       section(sectname, segname, data) do |sect|
         # reloff and nreloc are calculated later (in calculate_offsets)
         sect[:flags] = 0x400 # S_ATTR_SOME_INSTRUCTIONS
@@ -139,7 +139,7 @@ module Assembler
       @text_segname = real_segname || segname
       @text_sect_index = @sections[@text_segname].length-1
       @text_data_index = @data.length-1
-      
+
       return self
     end
 
@@ -203,14 +203,14 @@ module Assembler
       @reloc_info = reloc_info.map {|x| x.clone}
       return self
     end
-   
+
     # Define a symbol table.  This should usually be placed at the end of the
     # file.
     #
     # This function is overloaded to accept either an array of Nlist structs
     # packed into a byte string (i.e. a C array) and a string table, or a
     # single parameter: any type of Symtab.
-    
+
     def symtab(nlist_ary_or_symtab, stab=nil)
       if stab.nil?
         symtab = nlist_ary_or_symtab
@@ -219,19 +219,19 @@ module Assembler
       else
         nlist_ary = nlist_ary_or_symtab
       end
-      
+
       load_command(LC_SYMTAB) do |st|
         st[:nsyms] = nlist_ary.size
         st[:strsize] = stab.size
         # symoff and stroff are filled in when offsets are recalculated.
       end
-      
+
 #       puts ">>> Defining symbol table:"
 #       puts ">>> #{nlist_ary.size} symbols"
 #       puts ">>> stab = #{stab.inspect}"
 #       puts ">>> nlist_ary = #{nlist_ary.inspect}"
 #       puts ">>> (serialized) = #{nlist_ary.map{|n|n.serialize}.join.inspect}"
-      
+
       @data << nlist_ary.map {|n| n.serialize}.join
       @data << stab
       return self
@@ -240,11 +240,11 @@ module Assembler
 
     # Serialize the entire MachO file into a byte string.  This is simple
     # thanks to CStruct#serialize.
-    
+
     def serialize
       # TODO sanity checks, e.g. assert(@header[:ncmds] == @load_command.size)
       # ... perhaps an option to recalculate such data as well.
-      
+
       # Now that we have all the pieces of the file defined we can calculate
       # the file offsets of segments and sections.
       calculate_offsets
@@ -258,7 +258,7 @@ module Assembler
       # Mach-O file Part 2: Load Commands #
       #####################################
       # dump each load command (which include the section headers under them)
-      @load_commands.map do |cmd|               
+      @load_commands.map do |cmd|
         sects = @sections[cmd[:segname]] rescue []
         sects.inject(cmd.serialize) do |data, sect|
           data + sect.serialize
@@ -271,19 +271,19 @@ module Assembler
       @data.join
     end
 
-    
+
     # Update the file offsets in segments and sections.
-    
+
     def calculate_offsets
 
       # Maintain the offset into the the file on disk.  This is used
       # to update the various structures.
       offset = @header.bytesize
-            
+
       # First pass over load commands.  Most sizes are filled in here.
       @load_commands.each do |cmd|
         case cmd[:cmd]
-          
+
         when LC_SEGMENT
           seg = cmd
           sections = @sections[seg[:segname]]
@@ -292,25 +292,25 @@ module Assembler
           section_disk_size = sections.inject(0) do |total, sect|
             total + @section_disk_size[sect[:sectname]]
           end
-        
+
           ### TODO this should be redundant. try commenting it out one day.
           seg[:nsects] = sections.size
           seg[:cmdsize] = seg.bytesize + section_size
           ###
-          
+
           seg[:vmsize] = section_vm_size
           seg[:filesize] = section_disk_size
-          
+
         when LC_SYMTAB
           # nop
-          
+
         else
           raise "unsupported load command: #{cmd.inspect}"
         end
 
         offset += cmd[:cmdsize]
       end
-      
+
 
       # offset now points to the end of the Mach-O headers, or the beginning
       # of the binary blobs of section data at the end.
@@ -318,16 +318,16 @@ module Assembler
       # Second pass over load commands.  Fill in file offsets.
       @load_commands.each do |cmd|
         case cmd[:cmd]
-          
+
         when LC_SEGMENT
           seg = cmd
-          sections = @sections[seg[:segname]]        
+          sections = @sections[seg[:segname]]
           seg[:fileoff] = offset
           sections.each do |sect|
             sect[:offset] = offset
             offset += @section_disk_size[sect[:sectname]]
           end
-          
+
         when LC_SYMTAB
           if @reloc_info
             # update text section with relocation info
@@ -344,14 +344,14 @@ module Assembler
 
 
         # No else clause is necessary, the first iteration should have caught them.
-          
+
         end
-        
+
       end # @load_commands.each
 
     end # def calculate_offsets
-  
-  
+
+
     #######
     private
     #######
@@ -366,8 +366,8 @@ module Assembler
         raise "unsupported MachO file type: #{@header.inspect}"
       end
     end
-    
-    
+
+
   end # class MachOFile
-  
+
 end # module Assembler

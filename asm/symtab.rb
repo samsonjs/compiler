@@ -9,15 +9,15 @@ module Assembler
   # things will actually live in memory.
 
   class Symtab
-    
+
     attr_accessor :text_offset, :bss_offset, :const_offset
     attr_reader :const_data, :const_size, :bss_size, :reloc_info
-    
+
     def initialize
       @vars = {}                   # Map of variable names to offsets. (bss vars)
       @consts = {}                 # Map of constant names to offsets.
       @funcs = {}                  # map of function names to offsets.
-      
+
       # Initial data to load into memory (data for __DATA segment).
       @const_data = ''
 
@@ -36,7 +36,7 @@ module Assembler
       @bss_offset = 0
       @const_offset = 0
     end
-    
+
     # Generate a unique label.
     def unique_label(suffix=nil)
       @num_labels += 1
@@ -52,19 +52,19 @@ module Assembler
       @labels[name] = offset
       return name
     end
-    
+
 
     def lookup_label(name)
       @labels[name]
     end
-    
-    
+
+
     def defvar(name, bytes)
       @vars[name] = @bss_size
       @bss_size += bytes
     end
 
-    
+
     def defconst(name, value, bytes)
       @consts[name] = @const_size
       @const_size += bytes
@@ -76,15 +76,15 @@ module Assembler
       @funcs[name] = offset
     end
 
-    
+
     def var(name)
       @vars[name]
     end
-    
+
     def var?(name)
       @vars.has_key?(name)
     end
-    
+
     def const(name)
       @consts[name]
     end
@@ -94,5 +94,5 @@ module Assembler
     end
 
   end
-  
+
 end

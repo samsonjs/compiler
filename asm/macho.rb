@@ -2,7 +2,7 @@ require 'asm/cstruct'
 
 # The MachO module contains constants and structures related to the
 # Mach Object format (Mach-O).  They are relevant to Darwin on OS X.
-# 
+#
 # Constants and structures as defined in /usr/include/mach-o/loader.h
 # on Mac OS X Leopard (10.5.7).  Also see <mach-o/stab.h>,
 # <mach-o/nlist.h>, and <mach-o/reloc.h>.
@@ -13,7 +13,7 @@ module MachO
   ###############
   # Mach header #
   ###############
-  
+
   # Appears at the beginning of every Mach object file.
   class MachHeader < CStruct
     uint32 :magic
@@ -22,7 +22,7 @@ module MachO
     uint32 :filetype
     uint32 :ncmds
     uint32 :sizeofcmds
-    uint32 :flags        
+    uint32 :flags
   end
 
   # Values for the magic field.
@@ -40,13 +40,13 @@ module MachO
   MH_BUNDLE     = 0x8
   MH_DYLIB_STUB = 0x9
   MH_DSYM       = 0xa
-  
+
   # CPU types and subtypes (only Intel for now).
   CPU_TYPE_X86 = 7
-  CPU_TYPE_I386 = CPU_TYPE_X86  
+  CPU_TYPE_I386 = CPU_TYPE_X86
   CPU_SUBTYPE_X86_ALL = 3
-  
-  
+
+
   ############################
   # Load commands / segments #
   ############################
@@ -61,7 +61,7 @@ module MachO
   LC_SYMTAB         = 0x2
   LC_SYMSEG         = 0x3
   LC_THREAD         = 0x4
-  LC_UNIXTHREAD	    = 0x5  
+  LC_UNIXTHREAD	    = 0x5
 
   class SegmentCommand < LoadCommand
     string :segname, 16
@@ -74,7 +74,7 @@ module MachO
     uint32 :nsects
     uint32 :flags
   end
-  
+
 
   # Values for protection fields, maxprot and initprot.
   VM_PROT_NONE       = 0x00
@@ -91,18 +91,18 @@ module MachO
     uint32 :stroff     # Offset of the string table.
     uint32 :strsize    # Size of the string table in bytes.
   end
-  
+
 
   LoadCommandStructMap = {
     LC_SEGMENT => SegmentCommand,
     LC_SYMTAB  => SymtabCommand
   }
-  
+
 
   ############
   # Sections #
   ############
-  
+
   class Section < CStruct
     string :sectname, 16
     string :segname, 16
@@ -116,18 +116,18 @@ module MachO
     uint32 :reserved1
     uint32 :reserved2
   end
-  
+
   # Values for the type bitfield (mask 0x000000ff) of the flags field.
   # (incomplete!)
   S_REGULAR  = 0x0
   S_ZEROFILL = 0x1
   S_CSTRING_LITERALS = 0x2
-  
+
 
   ###########################
   # Relocation info support #
   ###########################
-  
+
   class RelocationInfo < CStruct
     int32  :r_address   # offset in the section to what is being relocated
     uint32 :r_info
@@ -149,12 +149,12 @@ module MachO
   # Relocation types (r_type)
   GENERIC_RELOC_VANILLA = 0
 
-  
+
   ########################
   # Symbol table support #
   ########################
-  
-  
+
+
   # Nlist is used to describe symbols.
   class Nlist < CStruct
     uint32 :n_strx     # Index into string table. Index of zero is the empty string.
@@ -163,7 +163,7 @@ module MachO
     uint16 :n_desc     # TODO See <mach-o/stab.h>.
     uint32 :n_value    # The symbol's value (or stab offset).
   end
-    
+
   # Type flag (see <mach-o/nlist.h> for more details)
   # ---------
   #
@@ -178,13 +178,13 @@ module MachO
   N_PEXT = 0x10   # private external symbol bit
   N_TYPE = 0x0e   # mask for the type bits
   N_EXT  = 0x01   # external symbol bit, set for external symbols (e.g. globals)
-  
+
   # Values for N_TYPE. (incomplete!)
   N_UNDF = 0x0    # undefined, n_sect == NO_SECT
   N_ABS  = 0x2    # absolute, n_sect == NO_SECT
   N_SECT = 0xe    # defined in section number n_sect
-  
+
   NO_SECT = 0
   MAX_SECT = 255
-  
+
 end

@@ -18,7 +18,7 @@ class ParseError < StandardError
 end
 
 class Compiler
-  
+
   include Assembler::Registers
 
   Keywords = {
@@ -280,7 +280,7 @@ class Compiler
       false_label = asm.mklabel(:false)
       truthy_label = asm.mklabel(:truthy)
       done_label = asm.mklabel(:done)
-      
+
       asm.cmp(EAX, FALSE)
       asm.jne(truthy_label)
 
@@ -306,7 +306,7 @@ class Compiler
       expected('&&') unless match_word('&&')
       false_label = asm.mklabel(:false)
       done_label = asm.mklabel(:done)
-      
+
       asm.cmp(EAX, FALSE)
       asm.je(false_label)
 
@@ -382,7 +382,7 @@ class Compiler
 
   # a: <on the stack>
   # b: eax
-  # 
+  #
   # If b - a is zero then a = b, and make_boolean will leave the zero
   # to effectively return false.  If b - a is non-zero then a != b,
   # and make_boolean will leave -1 (true) for us in eax.
@@ -409,8 +409,8 @@ class Compiler
   #       the assembler needed to implement, but since the Jcc
   #       instructions are very cheap to implement this is no longer
   #       a concern.
-  
-  
+
+
   # The next 4 relations all compare 2 values a and b, then return
   # true (-1) if the difference was below zero and false (0)
   # otherwise (using JL, jump if less than).
@@ -464,7 +464,7 @@ class Compiler
 
   # a: <on the stack>
   # b: eax
-  # 
+  #
   # if a <= b then !(a > b)
   def le_relation
     # Compare them as in greater than but invert the result.
@@ -506,7 +506,7 @@ class Compiler
     end
     @indent -= 1
   end
-  
+
   # Parse an if-else statement.
   def if_else_stmt
     else_label = asm.mklabel(:end_or_else)
@@ -528,7 +528,7 @@ class Compiler
   end
 
   # Used to implement the Two-Label-Loops (while, until, repeat).
-  # 
+  #
   # name:  Name of the loop for readable labels.
   # block: Code to execute at the start of each iteration. (e.g. a
   #        condition)
@@ -667,7 +667,7 @@ class Compiler
 
     # 12 bytes: 2 for "0x", 8 hex digits, 2 for newline + null terminator
     hex = asm.var!(h, 12)
-    
+
     asm.block do
       # TODO check sign and prepend '-' if negative
       mov([hex], 0x7830)  # "0x" ==> 48, 120
@@ -757,10 +757,10 @@ class Compiler
     @look = if @input.eof?
               nil
             else
-              @input.readbyte.chr 
+              @input.readbyte.chr
             end
   end
-  
+
   # Report error and halt
   def abort(msg)
     raise ParseError, msg
@@ -777,7 +777,7 @@ class Compiler
       raise ParseError.new(caller, context), "Expected #{what} but got #{got}."
     end
   end
-  
+
 
 
   # Recognize an alphabetical character.

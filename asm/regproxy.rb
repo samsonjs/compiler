@@ -1,5 +1,5 @@
 module Assembler
-  
+
   # Acts like a register and can be used as the base or index in an
   # effective address.
   #
@@ -9,7 +9,7 @@ module Assembler
     attr_reader :name, :size, :regnum
     attr_reader :base, :index, :scale
 
-    
+
     def initialize(name, size, regnum)
       @name = name # attrs are read-only so sharing is ok
       @size = size
@@ -17,7 +17,7 @@ module Assembler
       @base = self
     end
 
-  
+
     def +(index)
       raise "index already specified" if @index
       new_reg = self.clone
@@ -25,7 +25,7 @@ module Assembler
       new_reg
     end
 
-  
+
     def *(scale)
       raise "index must come first" unless @index
       raise "scale already specified" if scale
@@ -39,7 +39,7 @@ module Assembler
       @scale
     end
 
-    
+
     def index?
       @index
     end
@@ -50,18 +50,18 @@ module Assembler
     end
 
 
-        
+
     def to_s
       @name.to_s +
         (@index ? "+#{@index}" : '') +
         (@scale ? "*#{@scale}" : '')
     end
-    
-    
+
+
     def inspect
       to_s
     end
-  
+
   end
 
 end
