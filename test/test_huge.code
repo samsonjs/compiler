@@ -62,7 +62,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -127,7 +127,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -192,7 +192,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -257,7 +257,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -322,7 +322,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -387,7 +387,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -452,7 +452,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -517,7 +517,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -582,7 +582,7 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
 a=1
 print a
 aa=10
@@ -647,4 +647,4 @@ do 10
   a = a * a
 end
 
-xitcode=a-a
+exitcode=a-a
