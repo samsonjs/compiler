@@ -544,9 +544,9 @@ module Assembler
     #   3a. mov r/m32, reg32
     #   3b. mov memoffset32, eax
     #   4.  mov r/m32, immediate32
-    #   5.  mov r/m8, reg8
+    #   5.  mov r/m8, imm8
     #   6.  mov reg8, r/m8
-    #   7.  mov r/m8, imm8
+    #   7.  mov r/m8, reg8
     def mov(dest, src)
 
       # These 2 are used in the same way, just the name differs to make the
@@ -592,21 +592,24 @@ module Assembler
         modrm = [dest, 0]
         immediate = src
 
-      # version 5: mov r/m8, r8
-      elsif rm?(dest, :byte) && register?(src, :byte)
-        opcode = 0x88
-        modrm = [dest, src.regnum]
+      # version 5: mov r/m8, imm8
+      #
+      # It's important that this check is first because src integers can
+      # pass the register? check in version 7.
+      elsif rm?(dest, :byte) && immediate?(src, :byte)
+        opcode = 0xc6
+        modrm = [dest, 0]
+        immediate_byte = src
 
       # version 6: mov r8, r/m8
       elsif register?(dest, :byte) && rm?(src, :byte)
         opcode = 0x8a
         modrm = [src, dest.regnum]
 
-      # version 7: mov r/m8, imm8
-      elsif rm?(dest, :byte) && immediate?(src, :byte)
-        opcode = 0xc6
-        modrm = [dest, 0]
-        immediate_byte = src
+      # version 7: mov r/m8, r8
+      elsif rm?(dest, :byte) && register?(src, :byte)
+        opcode = 0x88
+        modrm = [dest, src.regnum]
 
       else
         # puts "rm?(dest): #{rm?(dest)}\t\trm?(src): #{rm?(src)}"
