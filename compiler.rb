@@ -670,7 +670,7 @@ class Compiler
 
     asm.block do
       # TODO check sign and prepend '-' if negative
-      mov([hex], 0x7830)  # "0x" ==> 48, 120
+      mov([hex], 0x7830)  # "0x" ==> 0x30 (48), 0x78 (120)
       mov([hex+4], 0)     # zero the rest
       mov([hex+8], 0)
       mov([:byte, hex+10], 0xa)  # newline
