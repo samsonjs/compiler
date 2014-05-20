@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+$LOAD_PATH << File.dirname(__FILE__)
+
 require 'compiler'
 require 'asm/text'
 require 'asm/binary'

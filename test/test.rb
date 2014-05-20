@@ -1,9 +1,6 @@
 #!/usr/bin/env ruby
 
-ROOT = Dir.pwd.sub(/\/test.*$/, '')
-$LOAD_PATH << ROOT
-
-require 'build'
+require '../build'
 
 # usage: test.rb <func> [outdir] [binformat] [format]
 
