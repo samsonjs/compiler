@@ -19,7 +19,7 @@ and /, loops, if/else statement, etc.  Integers are the only data
 type.
 
 While the parser still closely resembles Crenshaw's recursive descent
-parser, back-end generates x85 machine code using a homegrown
+parser, back-end generates x86 machine code using a homegrown
 assembler in ~1000 lines of Ruby (just 650 lines of real code).
 
 NOTE: OS X is the only platform that compiles working binaries right
