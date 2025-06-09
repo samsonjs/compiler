@@ -1,5 +1,5 @@
 sjs<br>
-[sami.samhuri@gmail.com](mailto:sami.samhuri@gmail.com)<br>
+[sami@samhuri.net](mailto:sami@samhuri.net)<br>
 
 published : 2009-09-22<br>
 updated   : 2010-01-19
