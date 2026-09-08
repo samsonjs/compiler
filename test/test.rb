@@ -7,12 +7,13 @@ require '../build'
 def main
   func = ARGV.shift
   outdir = ARGV.shift || '.'
-  Dir.mkdir(outdir) unless File.exists?(outdir)
+  Dir.mkdir(outdir) unless File.exist?(outdir)
   binformat = (ARGV.shift || 'elf').downcase
   format = (ARGV.shift || 'asm').downcase
   platform = `uname -s`.chomp.downcase
   print "testing #{func} ... "
-  success = run( build("test_#{func}.code", outdir, platform, binformat) )
+  exefile = builder(format).call("test_#{func}.code", outdir, platform, binformat)
+  success = run(exefile)
   if success == 0
     puts "pass"
   else

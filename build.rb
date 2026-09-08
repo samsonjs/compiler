@@ -20,11 +20,22 @@ def main
   raise "can't read #{filename}" unless File.readable?(filename)
   outdir = ARGV.shift || '.'
   platform = `uname -s`.chomp.downcase
-  binformat = ARGV[1] ? ARGV[1].downcase : DefaultBinFormats[platform]
-  puts "Building #{filename} for #{platform}, binformat is #{binformat} ..."
-  outfile = build(filename, outdir, platform, binformat)
+  binformat = (ARGV.shift || DefaultBinFormats[platform]).downcase
+  format = (ARGV.shift || 'asm').downcase
+  puts "Building #{filename} for #{platform}, binformat is #{binformat}, format is #{format} ..."
+  outfile = builder(format).call(filename, outdir, platform, binformat)
   puts outfile
   exit
+end
+
+# asm: generate assembly and let nasm encode it.
+# bin: encode machine code ourselves and write the object file directly.
+def builder(format)
+  case format
+  when 'asm' then method(:build_asm)
+  when 'bin' then method(:build)
+  else raise "unsupported format: #{format}"
+  end
 end
 
 
@@ -81,7 +92,7 @@ def link(filename, outdir, platform='linux')
                when 'darwin'
                  ['gcc', '-arch i386']
                when 'linux'
-                 ['ld', '']
+                 ['ld', '-m elf_i386']
                else
                  raise "unsupported platform: #{platform}"
                end
@@ -106,11 +117,11 @@ def build(filename, outdir, platform='linux', binformat='elf')
   return exefile
 end
 
-def build_asm(filename, platform='linux', binformat='elf')
-  asmfile = base(filename) + '.asm'
+def build_asm(filename, outdir, platform='linux', binformat='elf')
+  asmfile = File.join(outdir, base(filename) + '.asm')
   compile(filename, asmfile, Assembler::Text.new(platform))
   objfile = assemble(asmfile, binformat)
-  exefile = link(objfile, platform)
+  exefile = link(objfile, outdir, platform)
   return exefile
 end
 

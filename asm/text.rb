@@ -4,6 +4,8 @@
 # may 2009
 
 require 'asm/asm'
+require 'asm/symtab'
+require 'asm/varproxy'
 
 module Assembler
 
@@ -12,9 +14,14 @@ module Assembler
     # correct machine code, which isn't trivial.
     class Text < AssemblerBase
 
+      ROOT = File.expand_path('..', __dir__)
+
+      # Operand size assumed when nasm can't infer one from a register.
+      DefaultOperandSize = :dword
+
       def initialize(platform)
         super
-        @vars = {}                   # Symbol table, maps names to locations in BSS.
+        @symtab = Symtab.new           # Only used to track names, nasm lays things out.
         @data = ''
         @bss = ''
         @code = ''
@@ -27,22 +34,30 @@ module Assembler
         @data << "#{name}\tequ  #{value}"
       end
 
-      # Define a variable with the given name and size (in dwords).
-      def defvar(name, dwords=1)
+      # Define a variable with the given name and size in bytes.
+      def defvar(name, bytes=4)
         unless var?(name)
-          @bss << "#{name}: resd #{dwords}\n"
-          @vars[name] = name
+          @symtab.defvar(name, bytes)
+          @bss << "#{name}: resb #{bytes}\n"
         else
           STDERR.puts "[warning] attempted to redefine #{name}"
         end
+        return var(name)
       end
-
 
       def var(name)
-        @vars[name]
+        STDERR.puts "[error] undefined variable #{name}" unless var?(name)
+        VariableProxy.new(name)
       end
-      alias_method :var?, :var
 
+      def var?(name)
+        @symtab.var?(name)
+      end
+
+      # Define a variable unless it exists.
+      def var!(name, bytes=4)
+        var?(name) ? var(name) : defvar(name, bytes)
+      end
 
       # Emit a line of code wrapped between a tab and a newline.
       def emit(code, options={})
@@ -50,10 +65,12 @@ module Assembler
         @code << "#{tab}#{code}\n"
       end
 
-      def label(suffix=nil)
-        name = super
-        @labels[name] = name
-        return name
+      def mklabel(suffix=nil)
+        @symtab.unique_label(suffix)
+      end
+
+      def deflabel(name)
+        emit("#{name}:", :tab => nil)
       end
 
       def output
@@ -63,120 +80,48 @@ module Assembler
           sub("{code}", @code)
       end
 
-      def emit_label(name=label)
-        emit("#{name}:", :tab => nil)
+      # Memory operands are arrays, optionally prefixed with a size:
+      # [addr] or [:byte, addr].  Everything else is used as is.
+      def operand(op, default_size=nil)
+        return op.to_s unless op.is_a?(Array)
+        size, addr = op.size == 2 ? op : [default_size, op.first]
+        "#{size} [#{addr}]".lstrip
+      end
+
+      # nasm can only infer the size of a memory operand from a
+      # register, so spell it out when there isn't one.
+      def operands(*ops)
+        default_size = DefaultOperandSize unless ops.any? { |op| op.is_a?(RegisterProxy) }
+        ops.map { |op| operand(op, default_size) }.join(', ')
+      end
+
+      def instruction(name, *ops)
+        emit(ops.empty? ? name.to_s : "#{name} #{operands(*ops)}")
       end
 
       def mov(dest, src)
-        emit("mov #{dest}, #{src}#{src.is_a?(Numeric) ? " ; 0x#{src.to_s(16)}" : ''}")
+        comment = src.is_a?(Numeric) ? " ; 0x#{src.to_s(16)}" : ''
+        emit("mov #{operands(dest, src)}#{comment}")
       end
 
-      def movzx(dest, src)
-        emit("movzx #{dest}, #{src}")
+      %w[movzx add sub xchg and_ or_ xor cmp lea shr].each do |name|
+        define_method(name) { |dest, src| instruction(name.delete('_'), dest, src) }
       end
 
-      def add(dest, src)
-        emit("add #{dest}, #{src}")
+      %w[imul idiv inc dec push pop neg not_].each do |name|
+        define_method(name) { |op| instruction(name.delete('_'), op) }
       end
 
-      def sub(dest, src)
-        emit("sub #{dest}, #{src}")
+      %w[call jmp jc je jg jl jne jng jnl jnz jo js jz loop_].each do |name|
+        define_method(name) { |label| emit("#{name.delete('_')} #{label}") }
       end
 
-      def imul(op)
-        emit("imul #{op}")
-      end
-
-      def idiv(op)
-        emit("idiv #{op}")
-      end
-
-      def inc(op)
-        emit("inc #{op}")
-      end
-
-      def dec(op)
-        emit("dec #{op}")
-      end
-
-      def push(reg)
-        emit("push #{reg}")
-      end
-
-      def pop(reg)
-        emit("pop #{reg}")
-      end
-
-      def call(label)
-        emit("call #{label}")
-      end
-
-      def leave
-        emit("leave")
-      end
-
-      def neg(reg)
-        emit("neg #{reg}")
-      end
-
-      def not(rm32)
-        emit("not #{rm32}")
-      end
-
-      def xchg(op1, op2)
-        emit("xchg #{op1}, #{op2}")
-      end
-
-      def and_(op1, op2)
-        emit("and #{op1}, #{op2}")
-      end
-
-      def or(op1, op2)
-        emit("or #{op1}, #{op2}")
-      end
-
-      def xor(op1, op2)
-        emit("xor #{op1}, #{op2}")
-      end
-
-      def jz(label)
-        emit("jz #{label}")
-      end
-
-      def jnz(label)
-        emit("jnz #{label}")
-      end
-
-      def jmp(label)
-        emit("jmp #{label}")
-      end
-
-      def jl(label)
-        emit("jl #{label}")
-      end
-
-      def cmp(a, b)
-        emit("cmp #{a}, #{b}")
-      end
-
-      def lea(a, b)
-        emit("lea #{a}, #{b}")
-      end
-
-      def shr(a, b)
-        emit("shr #{a}, #{b}")
-      end
-
-      def loop_(label)
-        emit("loop #{label}")
+      %w[cdq leave ret].each do |name|
+        define_method(name) { instruction(name) }
       end
 
       def int(num)
         emit("int 0x#{num.to_s(16)}")
-      end
-
-      def cdq
-        emit("cdq")
       end
 
     end

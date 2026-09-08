@@ -36,6 +36,11 @@ module Assembler
       @const
     end
 
+    # The address as nasm would write it, e.g. i+4
+    def to_s
+      @ops.inject(@name.to_s) { |addr, (op, arg)| "#{addr}#{op}#{arg}" }
+    end
+
   end
 
 end

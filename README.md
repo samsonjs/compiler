@@ -2,7 +2,7 @@ sjs<br>
 [sami@samhuri.net](mailto:sami@samhuri.net)<br>
 
 published : 2009-09-22<br>
-updated   : 2010-01-19
+updated   : 2026-09-08
 
 
 Overview
@@ -22,8 +22,11 @@ While the parser still closely resembles Crenshaw's recursive descent
 parser, back-end generates x86 machine code using a homegrown
 assembler in ~1000 lines of Ruby (just 650 lines of real code).
 
-NOTE: OS X is the only platform that compiles working binaries right
-now.  ELF support for Linux coming ... eventually.
+NOTE: The homegrown assembler only writes Mach-O object files, and
+those need a 32-bit OS X toolchain that no longer exists.  On Linux
+the compiler emits assembly text instead and leaves the encoding to
+nasm, which is what the test suite and CI use.  Writing ELF object
+files directly is still on the list.
 
 
 Pre-requisites
@@ -39,9 +42,9 @@ MacPorts, or [homebrew](http://github.com/mxcl/homebrew).
 Linux
 -----
 
-You need Ruby and ld - which lives in the binutils package.
+You need Ruby, nasm, and ld - which lives in the binutils package.
 
-    % sudo aptitude install ruby binutils
+    % sudo apt install ruby nasm binutils
 
 That's it!
 
@@ -50,14 +53,20 @@ Compiling
 =========
 
 The build script should detect your platform.  If not append 'elf' or
-'macho' to the command.
+'macho' to the command.  The last argument picks the back-end: 'asm'
+(the default) generates assembly for nasm, 'bin' encodes the machine
+code in Ruby and needs a Mach-O toolchain.
 
-    % ./build.rb filename.code [elf | macho]
+    % ./build.rb filename.code [outdir] [elf | macho] [asm | bin]
 
 The resulting native executable is called 'filename' and you should be
 able it run it directly.
 
     % ./filename
+
+Run the test suite with make.
+
+    % make test
 
 
 Syntax in 2 minutes

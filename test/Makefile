@@ -11,7 +11,7 @@ ifeq ($(BINFORMAT), bin)
 	@echo "         Your platform, " $(PLATFORM) ", is unsupported."
 endif
 
-all: lt gt ge le eq neq or and if while until repeat for do break print big huge
+all: lt gt ge le eq neq or and bit_ops if while until repeat for do break print big huge
 	@true
 
 lt: test.rb test_lt.code

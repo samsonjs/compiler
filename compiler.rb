@@ -255,7 +255,7 @@ class Compiler
   end
 
   def bitor_expression
-    bit_op(:or, '|')
+    bit_op(:or_, '|')
   end
 
   def bitxor_expression
@@ -263,7 +263,7 @@ class Compiler
   end
 
   def bitand_expression
-    bit_op(:and, '&')
+    bit_op(:and_, '&')
   end
 
 
