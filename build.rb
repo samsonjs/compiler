@@ -5,6 +5,8 @@ $LOAD_PATH << File.dirname(__FILE__)
 require 'compiler'
 require 'asm/text'
 require 'asm/binary'
+require 'asm/elfsymtab'
+require 'asm/elffile'
 require 'asm/machosymtab'
 require 'asm/machofile'
 

@@ -22,11 +22,11 @@ While the parser still closely resembles Crenshaw's recursive descent
 parser, back-end generates x86 machine code using a homegrown
 assembler in ~1000 lines of Ruby (just 650 lines of real code).
 
-NOTE: The homegrown assembler only writes Mach-O object files, and
-those need a 32-bit OS X toolchain that no longer exists.  On Linux
-the compiler emits assembly text instead and leaves the encoding to
-nasm, which is what the test suite and CI use.  Writing ELF object
-files directly is still on the list.
+NOTE: The homegrown assembler writes ELF object files for Linux and
+Mach-O object files for OS X, but the latter need a 32-bit OS X
+toolchain that no longer exists.  The compiler can also emit assembly
+text and leave the encoding to nasm, and the test suite runs both ways
+on Linux.
 
 
 Pre-requisites
@@ -55,7 +55,7 @@ Compiling
 The build script should detect your platform.  If not append 'elf' or
 'macho' to the command.  The last argument picks the back-end: 'asm'
 (the default) generates assembly for nasm, 'bin' encodes the machine
-code in Ruby and needs a Mach-O toolchain.
+code and writes the object file in Ruby.
 
     % ./build.rb filename.code [outdir] [elf | macho] [asm | bin]
 
@@ -64,9 +64,10 @@ able it run it directly.
 
     % ./filename
 
-Run the test suite with make.
+Run the test suite with make, through either back-end.
 
     % make test
+    % make test FORMAT=bin
 
 
 Syntax in 2 minutes
@@ -124,13 +125,13 @@ and no prefixes are supported.  It's basically just a handful of
 instructions and mod-rm encoding.  I use the system's linker and have
 no intention of writing my own, don't worry!
 
-ELF support is still in C and not published in the repository.  The
-class to output Mach-O binaries is found in asm/machofile.rb.
+The classes that write object files are asm/elffile.rb and
+asm/machofile.rb.
 
-The asm/ directory holds the assembler but also the Mach-O code, for
-now.  This is my first assembler and first time working with the x86
-ISA, so it probably isn't great.  It outputs horribly inefficient code
-and there are no optimizations.
+The asm/ directory holds the assembler but also the ELF and Mach-O
+code, for now.  This is my first assembler and first time working
+with the x86 ISA, so it probably isn't great.  It outputs horribly
+inefficient code and there are no optimizations.
 
 I did not write this compiler with the intention of anyone else
 reading it but there are a reasonable amount of comments.
