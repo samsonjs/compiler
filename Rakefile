@@ -1,6 +1,11 @@
 require "standard/rake"
 
-task default: %i[test compare standard]
+task default: %i[eager_load test compare standard]
+
+desc "Check every file defines the constant Zeitwerk expects from its path"
+task :eager_load do
+  sh %(ruby -Ilib -e 'require "compiler"; Compiler::Loader.eager_load')
+end
 
 desc "Run the test suite through both back-ends"
 task test: %w[test:asm test:bin]

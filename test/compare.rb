@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require "../build"
+require_relative "../lib/compiler"
 
 # usage: compare.rb <func> [outdir] [binformat]
 #
@@ -29,7 +29,7 @@ def main
   print "comparing #{func} ... "
 
   listings = %w[bin asm].map do |format|
-    disassemble(builder(format).call("test_#{func}.code", outdir, platform, binformat))
+    disassemble(Compiler::Build.builder(format).call("test_#{func}.code", outdir, platform, binformat))
   end
 
   if listings[0] == listings[1]

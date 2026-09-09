@@ -1,0 +1,14 @@
+#!/usr/bin/env ruby
+
+require_relative "../lib/compiler"
+
+# usage: compile <filename> [output dir] [elf | macho] [asm | bin]
+
+filename = ARGV.shift.to_s
+raise "can't read #{filename}" unless File.readable?(filename)
+outdir = ARGV.shift || "."
+platform = `uname -s`.chomp.downcase
+binformat = (ARGV.shift || Compiler::Build::DefaultBinFormats[platform]).downcase
+format = (ARGV.shift || "bin").downcase
+puts "Building #{filename} for #{platform}, binformat is #{binformat}, format is #{format} ..."
+puts Compiler::Build.builder(format).call(filename, outdir, platform, binformat)

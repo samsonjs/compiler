@@ -57,7 +57,7 @@ The build script should detect your platform.  If not append 'elf' or
 (the default) encodes the machine code and writes the object file
 itself, 'asm' generates assembly and hands it to nasm.
 
-    % ./build.rb filename.code [outdir] [elf | macho] [asm | bin]
+    % bin/compile filename.code [outdir] [elf | macho] [asm | bin]
 
 The resulting native executable is called 'filename' and you should be
 able it run it directly.

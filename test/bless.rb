@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require "../build"
+require_relative "../lib/compiler"
 
 # usage: bless.rb <func> [outdir] [binformat] [format]
 #
@@ -22,7 +22,7 @@ def main
   platform = `uname -s`.chomp.downcase
   print "blessing #{func} ... "
 
-  result = run(builder(format).call("test_#{func}.code", outdir, platform, binformat))
+  result = Compiler::Build.run(Compiler::Build.builder(format).call("test_#{func}.code", outdir, platform, binformat))
   if result.status != 0
     puts "REFUSED! exited #{result.status}"
     exit(1)

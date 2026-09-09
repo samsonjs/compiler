@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require "../build"
+require_relative "../lib/compiler"
 
 # usage: test.rb <func> [outdir] [binformat] [format]
 
@@ -12,7 +12,7 @@ def main
   format = (ARGV.shift || "bin").downcase
   platform = `uname -s`.chomp.downcase
   print "testing #{func} ... "
-  result = run(builder(format).call("test_#{func}.code", outdir, platform, binformat))
+  result = Compiler::Build.run(Compiler::Build.builder(format).call("test_#{func}.code", outdir, platform, binformat))
 
   if result.status != 0
     puts "FAIL! (#{result.status})"
