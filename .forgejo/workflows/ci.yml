@@ -5,7 +5,7 @@ on:
 
 jobs:
   test:
-    name: Test suite
+    name: Tests and lint
     # On the host runner so the job can podman run the suite in a Ruby
     # image. The test binaries are 32-bit ELF, which the image's ld links
     # with -m elf_i386 and the x86-64 kernel runs as is.
@@ -14,9 +14,11 @@ jobs:
       - name: Check out
         uses: https://git.samhuri.net/sjs/actions/checkout@v1
         with:
-          require-file: build.rb
-      - name: Test suite
-        # Once through nasm, once through the homegrown assembler and ELF writer.
+          require-file: Gemfile
+      - name: Tests and lint
+        # rake runs the suite through both back-ends and then standard.
+        # The image tag tracks .ruby-version.
         run: |
-          podman run --rm -v "$PWD:/src" -w /src -e DEBIAN_FRONTEND=noninteractive docker.io/library/ruby:4.0 \
-            sh -ec 'apt-get update -q >/dev/null && apt-get install -y -q --no-install-recommends nasm >/dev/null && make test && make test FORMAT=bin'
+          podman run --rm -v "$PWD:/src" -w /src -e DEBIAN_FRONTEND=noninteractive \
+            "docker.io/library/ruby:$(cat .ruby-version)" \
+            sh -ec 'apt-get update -q >/dev/null && apt-get install -y -q --no-install-recommends nasm >/dev/null && bundle install --quiet && bundle exec rake'
