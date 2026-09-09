@@ -1,2 +1,24 @@
 ignore:
   - 'test/bin/**/*'
+
+  # An orphaned fragment of a class body, syntax error and all, that
+  # nothing requires.  standard can't parse it.
+  - 'asm/machowriter.rb'
+
+  # CamelCase constants are the house style throughout, and renaming
+  # them is a refactor rather than a reformat.
+  - '**/*':
+    - Naming/ConstantName
+
+  - 'compiler.rb':
+    # TRUE and FALSE here are the target language's booleans, -1 and 0,
+    # not Ruby's long-removed constants of the same name.  The cop's
+    # autocorrect silently changes the operands we emit.
+    - Lint/DeprecatedConstants
+    # :false and :true name generated labels; they aren't stand-ins for
+    # the Ruby booleans.
+    - Lint/BooleanSymbol
+
+  - 'asm/machofile.rb':
+    # A genuine bug rather than a formatting nit, tracked in #20.
+    - Lint/DuplicateMethods

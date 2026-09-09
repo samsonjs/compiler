@@ -6,52 +6,50 @@
 # sjs
 # may 2009
 
-require 'asm/registers'
-require 'asm/varproxy'
+require "asm/registers"
+require "asm/varproxy"
 
 class ParseError < StandardError
   attr_reader :caller, :context
-  def initialize(caller, context=nil)
+  def initialize(caller, context = nil)
     @caller = caller
     @context = context
   end
 end
 
 class Compiler
-
   include Assembler::Registers
 
   Keywords = {
-    'if'     => :if_else_stmt,
-    'while'  => :while_stmt,
-    'until'  => :until_stmt,
-    'repeat' => :repeat_stmt,
-    'for'    => :for_stmt,
-    'do'     => :do_stmt,
-    'break'  => :break_stmt,
-    'print'  => :print_stmt,
-    'else'   => nil,
-    'end'    => nil
+    "if" => :if_else_stmt,
+    "while" => :while_stmt,
+    "until" => :until_stmt,
+    "repeat" => :repeat_stmt,
+    "for" => :for_stmt,
+    "do" => :do_stmt,
+    "break" => :break_stmt,
+    "print" => :print_stmt,
+    "else" => nil,
+    "end" => nil
   }
 
   # Grouped by precedence.
   Ops = {
-    :add    => %w[+ -],
-    :mul    => %w[* /],
-    :rel    => %w[== != < > <= >=],
-    :or     => %w[||],
-    :and    => %w[&&],
-    :bit    => %w[| ^ &],
-    :unary  => %w[- +]
+    add: %w[+ -],
+    mul: %w[* /],
+    rel: %w[== != < > <= >=],
+    or: %w[||],
+    and: %w[&&],
+    bit: %w[| ^ &],
+    unary: %w[- +]
   }
   # Op chars are chars that can begin an op, so OpChars needs to be a
   # map of kinds of operators to a list of valid prefix chars.
-  OpChars = Ops.inject({}) { |hash, kv|
+  OpChars = Ops.each_with_object({}) { |kv, hash|
     key, val = *kv
-    hash[key] = val.map {|op| op[0, 1]} # slice off first char for each op
-    hash
-  # Include :all for a very general test.
-  }.merge(:all => Ops.values.flatten.map{|op| op[0, 1]}.sort.uniq)
+    hash[key] = val.map { |op| op[0, 1] } # slice off first char for each op
+    # Include :all for a very general test.
+  }.merge(all: Ops.values.flatten.map { |op| op[0, 1] }.sort.uniq)
 
   FALSE = 0
   TRUE = -1
@@ -60,7 +58,7 @@ class Compiler
 
   def initialize(input, asm)
     @indent = 0                  # for pretty printing
-    @look = ''                   # Next lookahead char.
+    @look = ""                   # Next lookahead char.
     @token = nil                 # Type of last read token.
     @value = nil                 # Value of last read token.
     @input = input               # Stream to read from.
@@ -75,7 +73,7 @@ class Compiler
 
   def compile
     block # parse a block of code
-    expected(:'end of file') unless eof?
+    expected(:"end of file") unless eof?
     asm.output
   end
 
@@ -105,7 +103,7 @@ class Compiler
   # put back the most recently parsed value
   def backtrack
     @input.ungetc(@look[0])
-    @value.reverse.each_byte {|i| @input.ungetc(i)}
+    @value.reverse.each_byte { |i| @input.ungetc(i) }
     get_char
   end
 
@@ -113,11 +111,11 @@ class Compiler
   def identifier
     name = get_name
 
-    if @look == '('
+    if @look == "("
       # function call
-      match('(')
+      match("(")
       # TODO arg list
-      match(')')
+      match(")")
       asm.call(name)
     else
       # variable access
@@ -127,16 +125,16 @@ class Compiler
 
   # Parse and translate a single factor.  Result is in eax.
   def factor
-    if @look == '('
-      match('(')
+    if @look == "("
+      match("(")
       boolean_expression
-      match(')')
+      match(")")
     elsif alpha?(@look)
       identifier                # or call
     elsif digit?(@look)
       asm.mov(EAX, get_number.to_i)
     else
-      expected(:'integer, identifier, function call, or parenthesized expression', :got => @look)
+      expected(:"integer, identifier, function call, or parenthesized expression", got: @look)
     end
   end
 
@@ -145,7 +143,7 @@ class Compiler
     sign = @look
     match(sign) if op?(:unary, sign)
     factor
-    asm.neg(EAX) if sign == '-'
+    asm.neg(EAX) if sign == "-"
   end
 
   # Parse and translate a single term (factor or mulop).  Result is in
@@ -156,9 +154,9 @@ class Compiler
     while op?(:mul, @look)
       asm.push(EAX)
       case @look
-      when '*'
+      when "*"
         multiply
-      when '/'
+      when "/"
         divide
       end
     end
@@ -172,9 +170,9 @@ class Compiler
     while op_char?(@look, :add)
       asm.push(EAX)
       case @look
-      when '+'
+      when "+"
         add
-      when '-'
+      when "-"
         subtract
       end
     end
@@ -183,7 +181,7 @@ class Compiler
   # Parse an addition operator and the 2nd term (b).  The result is
   # left in eax.  The 1st term (a) is expected on the stack.
   def add
-    match('+')
+    match("+")
     term                        # Result is in eax.
     asm.pop(EBX)
     asm.add(EAX, EBX)         # Add a to b.
@@ -192,7 +190,7 @@ class Compiler
   # Parse a subtraction operator and the 2nd term (b).  The result is
   # left in eax.  The 1st term (a) is expected on the stack.
   def subtract
-    match('-')
+    match("-")
     term                      # Result, b, is in eax.
     asm.pop(EBX)
     asm.neg(EAX)              # Fake the subtraction.  a - b == a + -b
@@ -202,7 +200,7 @@ class Compiler
   # Parse an addition operator and the 2nd term (b).  The result is
   # left in eax.  The 1st term (a) is expected on the stack.
   def multiply
-    match('*')
+    match("*")
     signed_factor               # Result is in eax.
     asm.pop(EBX)
     asm.imul(EBX)             # Multiply a by b.
@@ -211,19 +209,18 @@ class Compiler
   # Parse a division operator and the divisor (b).  The result is
   # left in eax.  The dividend (a) is expected on the stack.
   def divide
-    match('/')
+    match("/")
     signed_factor               # Result is in eax.
     asm.pop(EBX)
     asm.xchg(EAX, EBX)          # Swap the divisor and dividend into
-                                # the correct places.
+    # the correct places.
 
     # idiv uses edx:eax as the dividend so we need to ensure that edx
     # is correctly sign-extended w.r.t. eax.
     asm.cdq              # Sign-extend eax into edx (Convert Double to
-                         # Quad).
+    # Quad).
     asm.idiv(EBX)        # Divide a (eax) by b (ebx).
   end
-
 
   ###################
   # bit expressions #
@@ -234,11 +231,11 @@ class Compiler
     while op?(:bit, @look)
       scan
       case @value
-      when '|'
+      when "|"
         bitor_expression
-      when '^'
+      when "^"
         bitxor_expression
-      when '&'
+      when "&"
         bitand_expression
       else
         backtrack
@@ -255,17 +252,16 @@ class Compiler
   end
 
   def bitor_expression
-    bit_op(:or_, '|')
+    bit_op(:or_, "|")
   end
 
   def bitxor_expression
-    bit_op(:xor, '^')
+    bit_op(:xor, "^")
   end
 
   def bitand_expression
-    bit_op(:and_, '&')
+    bit_op(:and_, "&")
   end
-
 
   #######################
   # boolean expressions #
@@ -273,9 +269,9 @@ class Compiler
 
   def boolean_expression
     boolean_term
-    while @look == '|'
+    while @look == "|"
       scan
-      expected('||') unless match_word('||')
+      expected("||") unless match_word("||")
 
       false_label = asm.mklabel(:false)
       truthy_label = asm.mklabel(:truthy)
@@ -301,9 +297,9 @@ class Compiler
 
   def boolean_term
     not_factor
-    while @look == '&'
+    while @look == "&"
       scan
-      expected('&&') unless match_word('&&')
+      expected("&&") unless match_word("&&")
       false_label = asm.mklabel(:false)
       done_label = asm.mklabel(:done)
 
@@ -326,7 +322,7 @@ class Compiler
 
   def boolean_factor
     if boolean?(@look)
-      if get_boolean == 'true'
+      if get_boolean == "true"
         asm.mov(EAX, TRUE)
       else
         asm.xor(EAX, EAX)
@@ -338,8 +334,8 @@ class Compiler
   end
 
   def not_factor
-    if @look == '!'
-      match('!')
+    if @look == "!"
+      match("!")
       boolean_factor
       make_boolean(EAX)        # ensure it is -1 or 0...
       asm.not_(EAX)            # so that 1's complement NOT is also boolean not
@@ -350,7 +346,7 @@ class Compiler
 
   # Convert any identifier to a boolean (-1 or 0).  This is
   # semantically equivalent to !!reg in C or Ruby.
-  def make_boolean(reg=EAX)
+  def make_boolean(reg = EAX)
     end_label = asm.mklabel(:endmakebool)
     asm.cmp(reg, FALSE)         # if false do nothing
     asm.jz(end_label)
@@ -364,17 +360,17 @@ class Compiler
       scan
       asm.push(EAX)
       case @value
-      when '=='
+      when "=="
         eq_relation
-      when '!='
+      when "!="
         neq_relation
-      when '>'
+      when ">"
         gt_relation
-      when '>='
+      when ">="
         ge_relation
-      when '<'
+      when "<"
         lt_relation
-      when '<='
+      when "<="
         le_relation
       end
     end
@@ -410,11 +406,10 @@ class Compiler
   #       instructions are very cheap to implement this is no longer
   #       a concern.
 
-
   # The next 4 relations all compare 2 values a and b, then return
   # true (-1) if the difference was below zero and false (0)
   # otherwise (using JL, jump if less than).
-  def cmp_relation(a, b, options={})
+  def cmp_relation(a, b, options = {})
     bit_expression
     asm.pop(EBX)
 
@@ -459,7 +454,7 @@ class Compiler
   # if a >= b then !(a < b)
   def ge_relation
     # Compare them as in less than but invert the result.
-    cmp_relation(EBX, EAX, :invert => true)
+    cmp_relation(EBX, EAX, invert: true)
   end
 
   # a: <on the stack>
@@ -468,16 +463,15 @@ class Compiler
   # if a <= b then !(a > b)
   def le_relation
     # Compare them as in greater than but invert the result.
-    cmp_relation(EAX, EBX, :invert => true)
+    cmp_relation(EAX, EBX, invert: true)
   end
-
 
   ######################################
   # statements and controls structures #
   ######################################
 
   def keyword
-    unless action = @keywords[@value]
+    unless (action = @keywords[@value])
       raise "unsupported keyword: #{@value}"
     end
     send(action)
@@ -486,7 +480,7 @@ class Compiler
   # Parse an assignment statement.  Value is in eax.
   def assignment
     name = @value
-    match('=')
+    match("=")
     boolean_expression
     lval = asm.var!(name)
     asm.mov([lval], EAX)
@@ -496,7 +490,7 @@ class Compiler
   def block
     @indent += 1
     scan
-    until @value == 'else' || @value == 'end' || eof?
+    until @value == "else" || @value == "end" || eof?
       if @token == :keyword
         keyword
       else
@@ -511,19 +505,19 @@ class Compiler
   def if_else_stmt
     else_label = asm.mklabel(:end_or_else)
     end_label = else_label      # only generated if else clause
-                                # present
+    # present
     condition
     skip_any_whitespace
     asm.jz(else_label)
     block
-    if @token == :keyword && @value == 'else'
+    if @token == :keyword && @value == "else"
       skip_any_whitespace
       end_label = asm.mklabel(:endif) # now we need the 2nd label
       asm.jmp(end_label)
       asm.deflabel(else_label)
       block
     end
-    match_word('end')
+    match_word("end")
     asm.deflabel(end_label)
   end
 
@@ -538,7 +532,7 @@ class Compiler
     asm.deflabel(start_label)
     yield(end_label)
     pushing_label(end_label) { block }
-    match_word('end')
+    match_word("end")
     asm.jmp(start_label)
     asm.deflabel(end_label)
   end
@@ -552,15 +546,15 @@ class Compiler
   end
 
   def while_stmt
-    condition_loop('while', :jz) # done when == 0 (falsish)
+    condition_loop("while", :jz) # done when == 0 (falsish)
   end
 
   def until_stmt
-    condition_loop('until', :jnz) # done when != 0 (truthy)
+    condition_loop("until", :jnz) # done when != 0 (truthy)
   end
 
   def repeat_stmt
-    simple_loop('repeat') do |end_label|
+    simple_loop("repeat") do |end_label|
       skip_any_whitespace
     end
   end
@@ -572,18 +566,18 @@ class Compiler
   def for_stmt
     name = get_name
     counter = asm.defvar(name)
-    match('=')
+    match("=")
     boolean_expression                 # initial value
     asm.sub(EAX, 1)                    # pre-decrement because of the
-                                       # following pre-increment
+    # following pre-increment
     asm.mov([counter], EAX)   # stash the counter in memory
-    match_word('to', :scan => true)
+    match_word("to", scan: true)
     boolean_expression                 # final value
     skip_any_whitespace
     asm.push(EAX)                      # stash final value on stack
     final = [ESP]
 
-    simple_loop('for') do |end_label|
+    simple_loop("for") do |end_label|
       asm.mov(ECX, [counter]) # get the counter
       asm.add(ECX, 1)                  # increment
       asm.mov([counter], ECX) # store the counter
@@ -598,7 +592,6 @@ class Compiler
   #   ...
   # end
   def do_stmt
-
     boolean_expression
     skip_any_whitespace
     asm.mov(ECX, EAX)
@@ -613,7 +606,7 @@ class Compiler
 
     asm.pop(ECX)
 
-    match_word('end')
+    match_word("end")
     asm.dec(ECX)
     asm.jnz(start_label)
 
@@ -633,8 +626,8 @@ class Compiler
     if top_label
       asm.jmp(top_label)
     else
-      expected(:'break to be somewhere useful',
-               :got => :'a break outside a loop')
+      expected(:"break to be somewhere useful",
+        got: :"a break outside a loop")
     end
   end
 
@@ -648,22 +641,22 @@ class Compiler
   # print eax in hex format
   def print_stmt
     # variables
-    d = '__DIGITS'
-    h = '__HEX'
+    d = "__DIGITS"
+    h = "__HEX"
 
     digits = if asm.var?(d)
-               asm.var(d)
-             else
-               d_var = asm.defvar(d, 16)
-               asm.block do
-                 # define a lookup table of digits
-                 mov([d_var],    0x33323130)
-                 mov([d_var+4],  0x37363534)
-                 mov([d_var+8],  0x62613938)
-                 mov([d_var+12], 0x66656463)
-               end
-               d_var
-             end
+      asm.var(d)
+    else
+      d_var = asm.defvar(d, 16)
+      asm.block do
+        # define a lookup table of digits
+        mov([d_var], 0x33323130)
+        mov([d_var + 4], 0x37363534)
+        mov([d_var + 8], 0x62613938)
+        mov([d_var + 12], 0x66656463)
+      end
+      d_var
+    end
 
     # 12 bytes: 2 for "0x", 8 hex digits, 2 for newline + null terminator
     hex = asm.var!(h, 12)
@@ -671,32 +664,32 @@ class Compiler
     asm.block do
       # TODO check sign and prepend '-' if negative
       mov([hex], 0x7830)  # "0x" ==> 0x30 (48), 0x78 (120)
-      mov([hex+4], 0)     # zero the rest
-      mov([hex+8], 0)
-      mov([:byte, hex+10], 0xa)  # newline
-      mov([:byte, hex+11], 0)    # null terminator
+      mov([hex + 4], 0)     # zero the rest
+      mov([hex + 8], 0)
+      mov([:byte, hex + 10], 0xa)  # newline
+      mov([:byte, hex + 11], 0)    # null terminator
     end
     boolean_expression # result in EAX
     asm.block do
       # convert eax to a hex string
       lea(ESI, [digits])
-      lea(EDI, [hex+9])
+      lea(EDI, [hex + 9])
       # build the string backwards (right to left), byte by byte
       mov(ECX, 4)
     end
     asm.block do
-      deflabel(loop_label=mklabel)
+      deflabel(loop_label = mklabel)
       # low nybble of nth byte
       movzx(EBX, AL)
       and_(BL, 0x0f)        # isolate low nybble
-      movzx(EDX, [:byte, ESI+EBX])
+      movzx(EDX, [:byte, ESI + EBX])
       mov([EDI], DL)
       dec(EDI)
       # high nybble of nth byte
       movzx(EBX, AL)
       and_(BL, 0xf0)        # isolate high nybble
       shr(BL, 4)
-      mov(DL, [ESI+EBX])
+      mov(DL, [ESI + EBX])
       mov([EDI], DL)
       dec(EDI)
       shr(EAX, 8)
@@ -705,17 +698,17 @@ class Compiler
       mov(EAX, 4)               # SYS_write
       lea(ECX, [hex])           # ecx = &s
       args = [1,                # fd = 1 (STDOUT)
-              ECX,              # s = &s
-              11]               # n = 11 (excluding term, max # of chars to print)
+        ECX,              # s = &s
+        11]               # n = 11 (excluding term, max # of chars to print)
       case platform
-      when 'darwin'             # on the stack, right to left (right @ highest addr)
+      when "darwin"             # on the stack, right to left (right @ highest addr)
         ####
         # setup bogus stack frame
         push(EBP)
         mov(EBP, ESP)
         sub(ESP, 36)
         ####
-        args.reverse.each { |a| push(a) }
+        args.reverse_each { |a| push(a) }
         push(EAX)
         int(0x80)
         ####
@@ -725,7 +718,7 @@ class Compiler
         pop(EBX)
         leave
         ####
-      when 'linux'
+      when "linux"
         mov(EBX, args[0])
         mov(ECX, args[1])
         mov(EDX, args[2])
@@ -734,17 +727,15 @@ class Compiler
     end
   end
 
-
-############
-# internal #
-############
-
+  ############
+  # internal #
+  ############
 
   def eof?
     @input.eof? && @look.nil?
   end
 
-  def op_char?(char, kind=:all)
+  def op_char?(char, kind = :all)
     OpChars[kind].include?(char)
   end
 
@@ -755,10 +746,10 @@ class Compiler
   # Read the next character from the input stream.
   def get_char
     @look = if @input.eof?
-              nil
-            else
-              @input.readbyte.chr
-            end
+      nil
+    else
+      @input.readbyte.chr
+    end
   end
 
   # Report error and halt
@@ -767,43 +758,45 @@ class Compiler
   end
 
   # Report what was expected
-  def expected(what, options={})
+  def expected(what, options = {})
     got = options.has_key?(:got) ? options[:got] : @value
-    got, what = *[got, what].map {|x| x.is_a?(Symbol) ? x : "'#{x}'" }
+    got, what = *[got, what].map { |x| x.is_a?(Symbol) ? x : "'#{x}'" }
     if eof?
       raise ParseError.new(caller), "Premature end of file, expected: #{what}."
     else
-      context = (@input.readline rescue '(EOF)').gsub("\n", "\\n")
+      context = begin
+        @input.readline
+      rescue
+        "(EOF)"
+      end.gsub("\n", "\\n")
       raise ParseError.new(caller, context), "Expected #{what} but got #{got}."
     end
   end
 
-
-
   # Recognize an alphabetical character.
   def alpha?(char)
-    ('A'..'Z') === char.upcase
+    ("A".."Z") === char.upcase
   end
 
   # Recognize a decimal digit.
   def digit?(char)
-    ('0'..'9') === char
+    ("0".."9") === char
   end
 
   # Recognize an alphanumeric character.
   def alnum?(char)
-    alpha?(char) || digit?(char) || char == '_'
+    alpha?(char) || digit?(char) || char == "_"
   end
 
   # XXX disabled! ... should treat true/false as constants
   #     once again we need a token of lookahead
   def boolean?(char)
-    #char == 't' || char == 'f'
+    # char == 't' || char == 'f'
     false
   end
 
   def whitespace?(char)
-    char == ' ' || char == "\t"
+    char == " " || char == "\t"
   end
 
   def newline?(char)
@@ -811,7 +804,7 @@ class Compiler
   end
 
   def comment_char?(char)
-    char == '#'
+    char == "#"
   end
 
   def any_whitespace?(char)
@@ -820,7 +813,7 @@ class Compiler
 
   # Parse one or more newlines.
   def get_newline
-    expected(:newline, :got => @look) unless newline?(@look)
+    expected(:newline, got: @look) unless newline?(@look)
     many(:newline?)
     @token = :newline
     @value = "\n"
@@ -828,14 +821,14 @@ class Compiler
 
   # Match literal input.
   def match(char)
-    expected(char, :got => @look) unless @look == char
-#     puts "[ch] #{indent}#{char}"
+    expected(char, got: @look) unless @look == char
+    #     puts "[ch] #{indent}#{char}"
     get_char
     skip_whitespace
   end
 
   # Match literal input.
-  def match_word(word, options={})
+  def match_word(word, options = {})
     scan if options[:scan]
     match = @value == word
     expected(word) unless match
@@ -846,7 +839,7 @@ class Compiler
   # true.
   def many(test)
     test = method(test) if test.is_a?(Symbol)
-    token = ''
+    token = ""
     while !eof? && test[@look]
       token << @look
       get_char
@@ -874,7 +867,7 @@ class Compiler
 
   def get_boolean
     get_name
-    expected(:boolean) unless @value == 'true' || @value == 'false'
+    expected(:boolean) unless @value == "true" || @value == "false"
     @token = :boolean
     # puts "[bo] #{indent}#{@value}"
     @value
@@ -901,14 +894,13 @@ class Compiler
     skip_any_whitespace
   end
 
-
   def indent
-    real_indent = if @value == 'else' || @value == 'end'
-                    @indent - 1
-                  else
-                    @indent
-                  end
-    ' ' * (real_indent * 4)
+    real_indent = if @value == "else" || @value == "end"
+      @indent - 1
+    else
+      @indent
+    end
+    " " * (real_indent * 4)
   end
 
   def pushing(reg)
@@ -917,8 +909,7 @@ class Compiler
     asm.add(ESP, 4)
   end
 
-
-  class <<self
+  class << self
     def hook(callback, *methods)
       methods.each do |m|
         orig = :"orig_#{m}"
@@ -934,21 +925,21 @@ class Compiler
 
   def print_token
     print(case @token
-          when :keyword
-            '[kw] '
-          when :number
-            '[nu] '
-          when :identifier
-            '[id] '
-          when :op
-            '[op] '
-          when :boolean
-            '[bo] '
-          when :newline
-            ''
-          else
-            raise "print doesn't know about #{@token}: #{@value}"
-          end)
+    when :keyword
+      "[kw] "
+    when :number
+      "[nu] "
+    when :identifier
+      "[id] "
+    when :op
+      "[op] "
+    when :boolean
+      "[bo] "
+    when :newline
+      ""
+    else
+      raise "print doesn't know about #{@token}: #{@value}"
+    end)
     print indent
     puts @value
   end
@@ -971,7 +962,6 @@ class Compiler
     @label_stack.pop
   end
 
-#   hook(:print_token,
-#     :get_name, :get_newline, :get_number, :get_op, :get_boolean)
-
+  #   hook(:print_token,
+  #     :get_name, :get_newline, :get_number, :get_op, :get_boolean)
 end

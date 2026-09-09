@@ -1,15 +1,15 @@
 #!/usr/bin/env ruby
 
-require '../build'
+require "../build"
 
 # usage: test.rb <func> [outdir] [binformat] [format]
 
 def main
   func = ARGV.shift
-  outdir = ARGV.shift || '.'
+  outdir = ARGV.shift || "."
   Dir.mkdir(outdir) unless File.exist?(outdir)
-  binformat = (ARGV.shift || 'elf').downcase
-  format = (ARGV.shift || 'bin').downcase
+  binformat = (ARGV.shift || "elf").downcase
+  format = (ARGV.shift || "bin").downcase
   platform = `uname -s`.chomp.downcase
   print "testing #{func} ... "
   result = run(builder(format).call("test_#{func}.code", outdir, platform, binformat))
@@ -32,7 +32,7 @@ end
 
 def expected_output(func)
   filename = "test_#{func}.expected"
-  File.readable?(filename) ? File.read(filename) : ''
+  File.readable?(filename) ? File.read(filename) : ""
 end
 
 def report(expected, got)

@@ -1,6 +1,4 @@
 module Assembler
-
-
   # Abstract symbol table.
   #
   # Basically a big map of variable, constant, and label names to
@@ -9,7 +7,6 @@ module Assembler
   # things will actually live in memory.
 
   class Symtab
-
     attr_accessor :text_offset, :bss_offset, :const_offset
     attr_reader :const_data, :const_size, :bss_size, :reloc_info
 
@@ -19,13 +16,13 @@ module Assembler
       @funcs = {}                  # map of function names to offsets.
 
       # Initial data to load into memory (data for __DATA segment).
-      @const_data = ''
+      @const_data = ""
 
       @const_size = 0              # Size of const section.
       @bss_size = 0                # Size of bss section.
 
       # Map names to locations.
-      @labels = Hash.new {|h, key| raise "undefined label: #{key}"}
+      @labels = Hash.new { |h, key| raise "undefined label: #{key}" }
       @num_labels = 0              # Used to generate unique labels.
       @num_labels_with_suffix = Hash.new(0)
 
@@ -38,44 +35,38 @@ module Assembler
     end
 
     # Generate a unique label.
-    def unique_label(suffix=nil)
+    def unique_label(suffix = nil)
       @num_labels += 1
       if suffix
         @num_labels_with_suffix[suffix] += 1
         suffix = "_#{suffix}_#{@num_labels_with_suffix[suffix]}"
       end
-      name = "L#{sprintf "%06d", @num_labels}#{suffix}"
-      return name
+      "L#{sprintf "%06d", @num_labels}#{suffix}"
     end
 
     def deflabel(name, offset)
       @labels[name] = offset
-      return name
+      name
     end
-
 
     def lookup_label(name)
       @labels[name]
     end
-
 
     def defvar(name, bytes)
       @vars[name] = @bss_size
       @bss_size += bytes
     end
 
-
     def defconst(name, value, bytes)
       @consts[name] = @const_size
       @const_size += bytes
-      @const_data << [value].pack('i')
+      @const_data << [value].pack("i")
     end
-
 
     def defun(name, offset)
       @funcs[name] = offset
     end
-
 
     def var(name)
       @vars[name]
@@ -92,7 +83,5 @@ module Assembler
     def const?(name)
       @consts.has_key?(name)
     end
-
   end
-
 end

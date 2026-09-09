@@ -5,15 +5,13 @@
 # sjs
 # may 2009
 
-require 'asm/registers'
+require "asm/registers"
 
 module Assembler
-
   # Abstract class for common functionality between different code
   # generators.  Also defines somewhat of an interface that must be
   # implemented to be useful.
   class AssemblerBase
-
     attr_reader :platform
 
     def initialize(platform)
@@ -23,7 +21,5 @@ module Assembler
     def block(*args, &blk)
       instance_eval(&blk)
     end
-
   end
-
 end

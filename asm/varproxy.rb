@@ -1,5 +1,4 @@
 module Assembler
-
   # Wrap a variable's address so that we can perform arithmetic on it
   # before resolving it when we know where things will go in memory.
   # All we do is catch arithmetic ops and then provide a means to
@@ -7,11 +6,10 @@ module Assembler
   #
   # e.g. [symtab.var('i')] or [symtab.var('i') * 2]
   class VariableProxy
-
     attr_reader :name
     attr_accessor :ops
 
-    def initialize(name, const=false)
+    def initialize(name, const = false)
       @name = name
       @const = const
       @ops = []
@@ -21,7 +19,7 @@ module Assembler
       define_method(op) do |*args|
         new_proxy = self.class.new(@name, @const)
         new_proxy.ops << [op, *args]
-        return new_proxy
+        new_proxy
       end
     end
 
@@ -40,7 +38,5 @@ module Assembler
     def to_s
       @ops.inject(@name.to_s) { |addr, (op, arg)| "#{addr}#{op}#{arg}" }
     end
-
   end
-
 end

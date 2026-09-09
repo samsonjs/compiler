@@ -51,53 +51,51 @@
 # end
 
 class CStruct
-
-
   ###################
   # Class Constants #
   ###################
 
   # Size in bytes.
   SizeMap = {
-    :int8   => 1,
-    :uint8  => 1,
-    :int16  => 2,
-    :uint16 => 2,
-    :int32  => 4,
-    :uint32 => 4,
-    :string => lambda { |*opts| opts.first }, # first opt is size
+    int8: 1,
+    uint8: 1,
+    int16: 2,
+    uint16: 2,
+    int32: 4,
+    uint32: 4,
+    string: lambda { |*opts| opts.first }, # first opt is size
     # the last 3 are to make the language more C-like
-    :int    => 4,
-    :uint   => 4,
-    :char   => 1
+    int: 4,
+    uint: 4,
+    char: 1
   }
 
   # 32-bit
   PackMap = {
-    :int8   => 'c',
-    :uint8  => 'C',
-    :int16  => 's',
-    :uint16 => 'S',
-    :int32  => 'i',
-    :uint32 => 'I',
-    :string => lambda do |str, *opts|
-                        len = opts.first
-                        str.ljust(len, "\0")[0, len]
-                      end,
+    int8: "c",
+    uint8: "C",
+    int16: "s",
+    uint16: "S",
+    int32: "i",
+    uint32: "I",
+    string: lambda do |str, *opts|
+      len = opts.first
+      str.ljust(len, "\0")[0, len]
+    end,
     # a few C-like names
-    :int    => 'i',
-    :uint   => 'I',
-    :char   => 'C'
+    int: "i",
+    uint: "I",
+    char: "C"
   }
 
   # Only needed when unpacking is different from packing, i.e. strings w/ lambdas in PackMap.
   UnpackMap = {
-    :string => lambda do |str, *opts|
-                        len = opts.first
-                        val = str[0, len-1].sub(/\0*$/, '')
-                        str.slice!((len-1)..-1)
-                        val
-                      end
+    string: lambda do |str, *opts|
+      len = opts.first
+      val = str[0, len - 1].sub(/\0*$/, "")
+      str.slice!((len - 1)..-1)
+      val
+    end
   }
 
   ##########################
@@ -113,11 +111,9 @@ class CStruct
   #       private class variables.  That is definitely something to
   #       experiment with.
 
-  class <<self
-
+  class << self
     def inherited(subclass)
       subclass.instance_eval do
-
         # These "constants" are only constant references.  Structs can
         # be modified.  After the struct is defined it is still open,
         # but good practice would be not to change a struct after it
@@ -127,24 +123,37 @@ class CStruct
         # constants from the enclosing scope (and clone them before
         # modifying them!), and default to empty, er, defaults.
 
-        members = const_get(:Members).clone rescue []
-        member_index = const_get(:MemberIndex).clone rescue {}
-        member_sizes = const_get(:MemberSizes).clone rescue {}
-        member_opts = const_get(:MemberOptions).clone rescue {}
+        members = begin
+          const_get(:Members).clone
+        rescue
+          []
+        end
+        member_index = begin
+          const_get(:MemberIndex).clone
+        rescue
+          {}
+        end
+        member_sizes = begin
+          const_get(:MemberSizes).clone
+        rescue
+          {}
+        end
+        member_opts = begin
+          const_get(:MemberOptions).clone
+        rescue
+          {}
+        end
 
         const_set(:Members, members)
         const_set(:MemberIndex, member_index)
         const_set(:MemberSizes, member_sizes)
         const_set(:MemberOptions, member_opts)
-
       end
     end
-
 
     # Define a method for each size name, and when that method is called it updates
     # the struct class accordingly.
     SizeMap.keys.each do |type|
-
       define_method(type) do |name, *args|
         name = name.to_sym
         const_get(:MemberIndex)[name] = const_get(:Members).size
@@ -152,9 +161,7 @@ class CStruct
         const_get(:MemberOptions)[name] = args
         const_get(:Members) << name
       end
-
     end
-
 
     # Return the number of members.
     def size
@@ -176,9 +183,7 @@ class CStruct
       new_struct = new
       new_struct.unserialize(bin)
     end
-
   end
-
 
   ####################
   # Instance Methods #
@@ -290,7 +295,6 @@ class CStruct
 
   alias_method :to_a, :values
 
-
   # A few convenience methods.
 
   def members
@@ -313,13 +317,12 @@ class CStruct
   self
 end
 
-
 # a small test
 if $0 == __FILE__
   class MachHeader < CStruct
     uint :magic
-    int  :cputype
-    int  :cpusubtype
+    int :cputype
+    int :cpusubtype
     string :segname, 16
   end
   puts MachHeader::Members.inspect

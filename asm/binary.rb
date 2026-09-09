@@ -11,13 +11,11 @@
 # The start and exit shell codes were obtained by disassembling
 # minimal binaries on the respective platforms.
 
-require 'asm/asm'
-require 'asm/varproxy'
+require "asm/asm"
+require "asm/varproxy"
 
 module Assembler
-
   class Binary < AssemblerBase
-
     include Registers
 
     DEBUG_OUTPUT = false
@@ -25,8 +23,8 @@ module Assembler
     # 0.size gives the real answer, we only do x86-32 though
     MachineBytes = 4
     MachineBits = MachineBytes * 8
-    MinSigned = -1 * 2**(MachineBits-1)
-    MaxSigned = 2**(MachineBits-1) - 1
+    MinSigned = -1 * 2**(MachineBits - 1)
+    MaxSigned = 2**(MachineBits - 1) - 1
     MinUnsigned = 0
     MaxUnsigned = 2**MachineBits - 1
     SignedInt = MinSigned..MaxSigned
@@ -37,25 +35,22 @@ module Assembler
     # protected mode.
     DefaultOperandSize = :dword
 
-    SizeMap = {:byte => 8, :word => 16, :dword => 32}
+    SizeMap = {byte: 8, word: 16, dword: 32}
 
     X86_start = {
-      'linux' => [],
-      'darwin' => [ 0x55,                  # push ebp
-                    0x89, 0xe5,            # mov ebp, esp
-                    0x81, 0xec, 8, 0, 0, 0 # sub esp, 8
-                  ]
+      "linux" => [],
+      "darwin" => [0x55,                  # push ebp
+        0x89, 0xe5,            # mov ebp, esp
+        0x81, 0xec, 8, 0, 0, 0] # sub esp, 8
     }
 
     X86_exit = {
-      'linux' => [ 0x89, 0xc3,         # mov ebx, eax (exit code)
-                   0xb8, 1, 0, 0, 0,   # mov eax, 1
-                   0xcd, 0x80          # int 0x80
-                 ],
+      "linux" => [0x89, 0xc3,         # mov ebx, eax (exit code)
+        0xb8, 1, 0, 0, 0,   # mov eax, 1
+        0xcd, 0x80],          # int 0x80
 
-      'darwin' => [ 0xc9,       # leave
-                    0xc3        # ret
-                  ]
+      "darwin" => [0xc9,       # leave
+        0xc3]        # ret
     }
 
     attr_reader :ip
@@ -87,17 +82,17 @@ module Assembler
 
       # Always include the _main entry point in our symbol table.  It begins at the
       # beginning of the __TEXT segment, 0x0.
-      @symtab.deflabel('_main', @ip)
+      @symtab.deflabel("_main", @ip)
 
-      X86_start[@platform].each {|byte| emit_byte(byte)}
+      X86_start[@platform].each { |byte| emit_byte(byte) }
     end
 
     def output
-      X86_exit[@platform].each {|byte| emit_byte(byte)}
+      X86_exit[@platform].each { |byte| emit_byte(byte) }
 
       byte_array = resolve_labels
 
-      #puts "1st pass: " + byte_array.inspect if DEBUG_OUTPUT
+      # puts "1st pass: " + byte_array.inspect if DEBUG_OUTPUT
 
       binary = package(byte_array)
 
@@ -118,20 +113,20 @@ module Assembler
       bss_offset = @symtab.bss_offset
       const_offset = @symtab.const_offset
       @proxies.each do |i, proxy|
-        #puts ">>> Resolving #{proxy.name}" if DEBUG_OUTPUT
-        var = @symtab.var(proxy.name)
+        # puts ">>> Resolving #{proxy.name}" if DEBUG_OUTPUT
+        @symtab.var(proxy.name)
         base_addr = if proxy.const?
-                      const_offset + @symtab.const(proxy.name)
-                    else
-                      bss_offset + @symtab.var(proxy.name)
-                    end
-        #puts ">>> Replacing #{byte_array[i,4].map{|x|'0x' + x.to_s(16)}.inspect} with #{num_to_quad(proxy.resolve(base_addr)).map{|x|'0x' + x.to_s(16)}.inspect}" if DEBUG_OUTPUT
+          const_offset + @symtab.const(proxy.name)
+        else
+          bss_offset + @symtab.var(proxy.name)
+        end
+        # puts ">>> Replacing #{byte_array[i,4].map{|x|'0x' + x.to_s(16)}.inspect} with #{num_to_quad(proxy.resolve(base_addr)).map{|x|'0x' + x.to_s(16)}.inspect}" if DEBUG_OUTPUT
         byte_array[i, 4] = num_to_quad(proxy.resolve(base_addr))
       end
 
       binary = package(byte_array)
 
-      #puts "2nd pass: " + byte_array.inspect if DEBUG_OUTPUT
+      # puts "2nd pass: " + byte_array.inspect if DEBUG_OUTPUT
 
       objwriter = @objwriter_class.new
       objwriter.text(binary)
@@ -162,7 +157,6 @@ module Assembler
 
           bytes_read += 4
 
-
         # TODO find out if we should calculate addrs as offsets rather than
         #      absolute as they are done now. (ok for Mach-O, maybe not ELF)
         elsif label?(x)
@@ -170,8 +164,7 @@ module Assembler
           real_ip = bytes_read + 4
           name = x[1]
           addr = @symtab.lookup_label(name) - real_ip # dest - src to get relative addr
-          #puts "resolved label: #{x} = 0x#{@symtab.lookup_label(name).to_s(16)} (rel: 0x#{addr.to_s(16)}, ip = 0x#{real_ip.to_s(16)}, bytes_read = 0x#{bytes_read.to_s(16)})" if DEBUG_OUTPUT
-
+          # puts "resolved label: #{x} = 0x#{@symtab.lookup_label(name).to_s(16)} (rel: 0x#{addr.to_s(16)}, ip = 0x#{real_ip.to_s(16)}, bytes_read = 0x#{bytes_read.to_s(16)})" if DEBUG_OUTPUT
 
           bytes += num_to_quad(addr)
           bytes_read += 4
@@ -181,11 +174,11 @@ module Assembler
         end
       end
 
-      return bytes
+      bytes
     end
 
     def package(bytes)
-      bytes.pack('c*')
+      bytes.pack("c*")
     end
 
     # Silly semantics, but labels don't count as an address since they
@@ -201,27 +194,27 @@ module Assembler
     # XXX this should probably evaluate the value somehow
     def defconst(name, bytes, value)
       @symtab.defconst(name, bytes, value)
-      return const(name)
+      const(name)
     end
 
     # Define a variable with the given name and size in bytes.
-    def defvar(name, bytes=MachineBytes)
-      unless @symtab.var?(name)
-        @symtab.defvar(name, bytes)
+    def defvar(name, bytes = MachineBytes)
+      if @symtab.var?(name)
+        warn "[warning] attempted to redefine #{name}"
       else
-        STDERR.puts "[warning] attempted to redefine #{name}"
+        @symtab.defvar(name, bytes)
       end
-      return var(name)
+      var(name)
     end
 
     def var(name)
-      STDERR.puts "[error] undefined variable #{name}" unless var?(name)
+      warn "[error] undefined variable #{name}" unless var?(name)
       # TODO bail on undefined vars
       VariableProxy.new(name)
     end
 
     def const(name)
-      STDERR.puts "[error] undefined variable #{name}" unless const?(name)
+      warn "[error] undefined variable #{name}" unless const?(name)
       # TODO bail on undefined consts
       VariableProxy.new(name, true)
     end
@@ -235,7 +228,7 @@ module Assembler
     end
 
     # Define a variable unless it exists.
-    def var!(name, bytes=MachineBytes)
+    def var!(name, bytes = MachineBytes)
       if var?(name)
         var(name)
       else
@@ -246,21 +239,17 @@ module Assembler
     # Count the bytes that were encoded in the given block.
     def asm
       # stash the current number of bytes written
-      instruction_offset = @ip
 
-      print "0x#{@ip.to_s(16).rjust(4, '0')}\t" if DEBUG_OUTPUT
+      print "0x#{@ip.to_s(16).rjust(4, "0")}\t" if DEBUG_OUTPUT
 
       yield
 
       # return the number of bytes written
-      @ip - instruction_offset
 
       puts if DEBUG_OUTPUT
     end
 
-
     def emit_byte(byte)
-
       ##### The joke's on me! Array#pack('c*') already does this.  It is nice to see
       #     in the debugging output though, so it stays for now.
       #
@@ -277,10 +266,10 @@ module Assembler
       # make sure it's a byte
       raise "not a byte: #{byte.inspect}" unless byte == byte & 0xff
 
-      byte = byte & 0xff
+      byte &= 0xff
       ###  end of pointless code
 
-      print (byte >= 0 && byte < 0x10 ? '0' : '') + byte.to_s(16) + ' ' if DEBUG_OUTPUT
+      print ((byte >= 0 && byte < 0x10) ? "0" : "") + byte.to_s(16) + " " if DEBUG_OUTPUT
 
       @ir << byte
       @ip += 1
@@ -315,7 +304,7 @@ module Assembler
       num_to_quad(num).each { |byte| emit_byte(byte) }
     end
 
-    def mklabel(suffix=nil)
+    def mklabel(suffix = nil)
       @symtab.unique_label(suffix)
     end
 
@@ -324,7 +313,7 @@ module Assembler
       @symtab.deflabel(name, @ip)
     end
 
-    def emit_modrm(addr, reg=0)
+    def emit_modrm(addr, reg = 0)
       mod = 0
       rm = 0
       disp8 = nil
@@ -429,9 +418,8 @@ module Assembler
       emit_var(var) if var
     end
 
-
     def mk_sib(scale, index, base)
-      if [1,2,4,8].include?(scale)
+      if [1, 2, 4, 8].include?(scale)
         scale = log2(scale).to_i
       else
         raise "unsupported SIB scale: #{scale}, should be 1, 2, 4, or 8"
@@ -442,18 +430,17 @@ module Assembler
         index = index.regnum
       end
       base = base.regnum if base.respond_to?(:regnum)
-      return (scale << 6) | (index << 3) | base
+      (scale << 6) | (index << 3) | base
     end
 
-
-    def register?(op, size=DefaultOperandSize)
+    def register?(op, size = DefaultOperandSize)
       op.is_a?(RegisterProxy) && op.size == size ||
         op.respond_to?(:size) && op.size == SizeMap[size]
     end
 
-    def immediate?(op, size=DefaultOperandSize)
+    def immediate?(op, size = DefaultOperandSize)
       bits = SizeMap[size] || size
-      op.is_a?(Numeric) && op >= -(2 ** bits / 2) && op <= (2 ** bits - 1)
+      op.is_a?(Numeric) && op >= -(2**bits / 2) && op <= (2**bits - 1)
     end
 
     # Return true if op is a valid operand of the specified size.
@@ -466,7 +453,7 @@ module Assembler
     #   * effective addresses (wrapped in an array to look like nasm code)
     #
     # XXX This method is pretty ugly.
-    def rm?(op, size=DefaultOperandSize)
+    def rm?(op, size = DefaultOperandSize)
       is_register = register?(op, size)
 
       if op.is_a?(Array)
@@ -490,7 +477,7 @@ module Assembler
       is_register || is_reg_or_mem || is_size_and_mem
     end
 
-    def offset?(addr, size=DefaultOperandSize)
+    def offset?(addr, size = DefaultOperandSize)
       addr.is_a?(Array) && (addr[0].is_a?(Numeric) || addr[0].is_a?(VariableProxy))
     end
 
@@ -498,19 +485,18 @@ module Assembler
       immediate?(op) || offset?(op)
     end
 
-
     # Convert a number to a quad of bytes, discarding excess bits.
     # Little endian!
     def num_to_quad(num)
       [
-       num & 0xff,
-       (num >>  8) & 0xff,
-       (num >> 16) & 0xff,
-       (num >> 24) & 0xff
+        num & 0xff,
+        (num >> 8) & 0xff,
+        (num >> 16) & 0xff,
+        (num >> 24) & 0xff
       ]
     end
 
-    def log2(x, tol=1e-13)
+    def log2(x, tol = 1e-13)
       result = 0.0
 
       # Integer part
@@ -536,7 +522,6 @@ module Assembler
       result
     end
 
-
     # 9 versions of the mov instruction are supported:
     #   1.  mov reg32, immediate32
     #   2a. mov reg32, r/m32
@@ -548,7 +533,6 @@ module Assembler
     #   6.  mov reg8, r/m8
     #   7.  mov r/m8, reg8
     def mov(dest, src)
-
       # These 2 are used in the same way, just the name differs to make the
       # meaning clear.  They are 4-byte values that are emited at the end if
       # they are non-nil.  Only one of them will be emited, and if both are
@@ -644,20 +628,17 @@ module Assembler
       end
     end
 
-
     def movzx(dest, src)
-
       # movzx Gv, ??
       if register?(dest)
 
-        opcode = case
-                 when rm?(src, :byte)
-                   0xb6 # movzx Gv, Eb
-                 when rm?(src, :word)
-                   0xb7 # movzx Gv, Ew
-                 else
-                   raise "unsupported MOVZX instruction, dest=#{dest.inspect} << src=#{src.inspect} >>"
-                 end
+        opcode = if rm?(src, :byte)
+          0xb6 # movzx Gv, Eb
+        elsif rm?(src, :word)
+          0xb7 # movzx Gv, Ew
+        else
+          raise "unsupported MOVZX instruction, dest=#{dest.inspect} << src=#{src.inspect} >>"
+        end
         asm do
           emit_byte(0x0f)
           emit_byte(opcode)
@@ -669,7 +650,6 @@ module Assembler
         raise "unimplemented MOVZX instruction, << dest=#{dest.inspect} >> src=#{src.inspect}"
       end
     end
-
 
     def xchg(dest, src)
       if dest == EAX && register?(src)
@@ -697,7 +677,6 @@ module Assembler
       asm { emit_byte(0x99) }
     end
 
-
     def add(dest, src)
       # add r/m32, imm8
       if rm?(dest) && immediate?(src, :byte)
@@ -709,11 +688,11 @@ module Assembler
 
       # add r/m32, imm32
       elsif rm?(dest) && immediate?(src)
-         asm do
-           emit_byte(0x81)
-           emit_modrm(dest, 0)
-           emit_dword(src)
-         end
+        asm do
+          emit_byte(0x81)
+          emit_modrm(dest, 0)
+          emit_dword(src)
+        end
 
       # add eax, imm32
       elsif dest == EAX && immediate?(src)
@@ -733,7 +712,6 @@ module Assembler
         raise "unsupported ADD instruction, dest=#{dest.inspect} src=#{src.inspect}"
       end
     end
-
 
     def sub(dest, src)
       # sub r/m32, imm8
@@ -771,13 +749,12 @@ module Assembler
       end
     end
 
-
     # Signed multiply.
     def imul(*ops)
       case ops.size
 
       when 1
-        group3(ops[0], 5, 'IMUL')
+        group3(ops[0], 5, "IMUL")
 
       when 2
         dest, src = ops
@@ -790,20 +767,18 @@ module Assembler
 
     # Unsigned multiply.
     def mul(op)
-      group3(op, 4, 'MUL')
+      group3(op, 4, "MUL")
     end
-
 
     # Signed divide.
     def idiv(op)
-      group3(op, 7, 'IDIV')
+      group3(op, 7, "IDIV")
     end
 
     # Unsigned divide.
     def div(op)
-      group3(op, 6, 'DIV')
+      group3(op, 6, "DIV")
     end
-
 
     def inc(op)
       asm do
@@ -818,7 +793,6 @@ module Assembler
       end
     end
 
-
     def dec(op)
       if register?(op)
         # dec reg32
@@ -828,9 +802,7 @@ module Assembler
       end
     end
 
-
     def shr(op, n)
-
       # shr r/m??, imm8
       if SignedByte === n
 
@@ -845,9 +817,7 @@ module Assembler
       else
         raise "unsupported SHR instruction, op=#{op.inspect}, n=#{n.inspect}"
       end
-
     end
-
 
     def and_(dest, src)
       if rm?(dest) && register?(src)
@@ -898,17 +868,14 @@ module Assembler
       end
     end
 
-
     def not_(op)
-      group3(op, 2, 'NOT')
+      group3(op, 2, "NOT")
     end
     alias_method :not, :not_
 
-
     def neg(op)
-      group3(op, 3, 'NEG')
+      group3(op, 3, "NEG")
     end
-
 
     def push(op)
       # push reg32
@@ -932,7 +899,6 @@ module Assembler
       end
     end
 
-
     def pop(op)
       # pop reg32
       if register?(op)
@@ -942,7 +908,6 @@ module Assembler
         raise "unsupported POP instruction: op=#{op.inspect}"
       end
     end
-
 
     def cmp(op1, op2)
       # cmp r/m32, reg32
@@ -964,7 +929,6 @@ module Assembler
       end
     end
 
-
     # Only jmp rel32 is supported.
     def jmp(label)
       asm do
@@ -974,20 +938,20 @@ module Assembler
     end
 
     # These all jump near (rel32).
-    JccOpcodeMap = Hash.new { |key| raise "unsupported Jcc instruction: #{key}" }.
-                        merge({
-      :jc  => 0x82,  # carry            (CF=1)
-      :je  => 0x84,  # equal            (ZF=1) --- same as jz
-      :jg  => 0x8f,  # greater          (ZF=0 and SF=OF)
-      :jl  => 0x8c,  # less than        (SF!=OF)
-      :jne => 0x85,  # not equal        (ZF=0) --- same as jnz
-      :jng => 0x8e,  # not greater than (ZF=1 or SF!=OF)
-      :jnl => 0x8d,  # not less than    (SF=OF)
-      :jnz => 0x85,  # not zero         (ZF=0)
-      :jo  => 0x80,  # overflow         (OF=1)
-      :js  => 0x88,  # sign             (SF=1)
-      :jz  => 0x84   # zero             (ZF=1)
-    })
+    JccOpcodeMap = Hash.new { |key| raise "unsupported Jcc instruction: #{key}" }
+      .merge({
+        jc: 0x82,  # carry            (CF=1)
+        je: 0x84,  # equal            (ZF=1) --- same as jz
+        jg: 0x8f,  # greater          (ZF=0 and SF=OF)
+        jl: 0x8c,  # less than        (SF!=OF)
+        jne: 0x85,  # not equal        (ZF=0) --- same as jnz
+        jng: 0x8e,  # not greater than (ZF=1 or SF!=OF)
+        jnl: 0x8d,  # not less than    (SF=OF)
+        jnz: 0x85,  # not zero         (ZF=0)
+        jo: 0x80,  # overflow         (OF=1)
+        js: 0x88,  # sign             (SF=1)
+        jz: 0x84   # zero             (ZF=1)
+      })
 
     # Only Jcc rel32 is supported.
     def jcc(instruction, label)
@@ -1005,14 +969,12 @@ module Assembler
       end
     end
 
-
     def lea(r32, mem)
       asm do
         emit_byte(0x8d)
         emit_modrm(mem, r32.regnum)
       end
     end
-
 
     def int(n)
       asm do
@@ -1021,16 +983,13 @@ module Assembler
       end
     end
 
-
     def ret
       asm { emit_byte(0xc3) }
     end
 
-
     def leave
       asm { emit_byte(0xc9) }
     end
-
 
     # NOTE: LOOP only accepts a 1-byte signed offset.  Don't use it.
     def loop_(label)
@@ -1046,7 +1005,6 @@ module Assembler
       end
     end
     alias_method :loop, :loop_
-
 
     # Opcode group #3.  1-byte opcode, 1 operand (r/m8 or r/m32).
     #
@@ -1066,8 +1024,5 @@ module Assembler
         emit_modrm(op, reg)
       end
     end
-
-
   end # class Binary
-
 end # module Assembler

@@ -2,28 +2,30 @@
 
 $LOAD_PATH << File.dirname(__FILE__)
 
-require 'compiler'
-require 'asm/text'
-require 'asm/binary'
-require 'asm/elfsymtab'
-require 'asm/elffile'
-require 'asm/machosymtab'
-require 'asm/machofile'
+require "compiler"
+require "asm/text"
+require "asm/binary"
+require "asm/elfsymtab"
+require "asm/elffile"
+require "asm/machosymtab"
+require "asm/machofile"
 
 # usage: build.rb <filename> [output filename] [elf | macho ] [asm | bin]
 
-DefaultBinFormats = Hash.new('bin')
-def binformat(p,f) DefaultBinFormats[p]=f end
-binformat 'darwin', 'macho'
-binformat 'linux',  'elf'
+DefaultBinFormats = Hash.new("bin")
+def binformat(p, f)
+  DefaultBinFormats[p] = f
+end
+binformat "darwin", "macho"
+binformat "linux", "elf"
 
 def main
   filename = ARGV.shift.to_s
   raise "can't read #{filename}" unless File.readable?(filename)
-  outdir = ARGV.shift || '.'
+  outdir = ARGV.shift || "."
   platform = `uname -s`.chomp.downcase
   binformat = (ARGV.shift || DefaultBinFormats[platform]).downcase
-  format = (ARGV.shift || 'bin').downcase
+  format = (ARGV.shift || "bin").downcase
   puts "Building #{filename} for #{platform}, binformat is #{binformat}, format is #{format} ..."
   outfile = builder(format).call(filename, outdir, platform, binformat)
   puts outfile
@@ -34,33 +36,31 @@ end
 # bin: encode machine code ourselves and write the object file directly.
 def builder(format)
   case format
-  when 'asm' then method(:build_asm)
-  when 'bin' then method(:build)
+  when "asm" then method(:build_asm)
+  when "bin" then method(:build)
   else raise "unsupported format: #{format}"
   end
 end
 
-
-def error(msg) STDERR.puts(msg) end
+def error(msg)
+  warn(msg)
+end
 
 # name part (filename minus extension)
 def base(filename)
-  filename.sub(/\.[^.]*$/, '')
+  filename.sub(/\.[^.]*$/, "")
 end
-
 
 # infile:   input filename
 # outfile:  output filename
 # asm:      assembler to use
 def compile(infile, outfile, asm)
-
-  File.open(infile, 'r') do |input|
-    File.open(outfile, 'wb') do |out|
+  File.open(infile, "r") do |input|
+    File.open(outfile, "wb") do |out|
       compiler = Compiler.new(input, asm)
       out.print(compiler.compile)
     end
   end
-
 rescue ParseError => e
   error("[error] #{e.message}")
   error("[context] #{e.context}")
@@ -80,57 +80,55 @@ def run_and_warn_on_failure(command)
 end
 
 # assemble using nasm, return resulting filename.
-def assemble(filename, binformat='elf')
+def assemble(filename, binformat = "elf")
   f = base(filename)
   outfile = "#{f}.o"
   run_and_warn_on_failure("nasm -f #{binformat} -g -o #{outfile} #{filename} 2>&1")
-  return outfile
+  outfile
 end
 
 # link with ld, return resulting filename.
-def link(filename, outdir, platform='linux')
+def link(filename, outdir, platform = "linux")
   f = base(filename)
   cmd, args = *case platform
-               when 'darwin'
-                 ['gcc', '-arch i386']
-               when 'linux'
-                 ['ld', '-m elf_i386']
+               when "darwin"
+                 ["gcc", "-arch i386"]
+               when "linux"
+                 ["ld", "-m elf_i386"]
                else
                  raise "unsupported platform: #{platform}"
                end
   run_and_warn_on_failure("#{cmd} #{args} -o #{f} #{filename} 2>&1")
   `chmod u+x #{f}`
-  return f
+  f
 end
 
-def build(filename, outdir, platform='linux', binformat='elf')
-  objfile = File.join(outdir, base(filename) + '.o')
+def build(filename, outdir, platform = "linux", binformat = "elf")
+  objfile = File.join(outdir, base(filename) + ".o")
   symtab, objwriter_class =
     case binformat
-    when 'elf'
+    when "elf"
       [Assembler::ELFSymtab.new, Assembler::ELFFile]
-    when 'macho'
+    when "macho"
       [Assembler::MachOSymtab.new, Assembler::MachOFile]
     else
       raise "unsupported binary format: #{binformat}"
     end
   compile(filename, objfile, Assembler::Binary.new(platform, symtab, objwriter_class))
-  exefile = link(objfile, outdir, platform)
-  return exefile
+  link(objfile, outdir, platform)
 end
 
-def build_asm(filename, outdir, platform='linux', binformat='elf')
-  asmfile = File.join(outdir, base(filename) + '.asm')
+def build_asm(filename, outdir, platform = "linux", binformat = "elf")
+  asmfile = File.join(outdir, base(filename) + ".asm")
   compile(filename, asmfile, Assembler::Text.new(platform))
   objfile = assemble(asmfile, binformat)
-  exefile = link(objfile, outdir, platform)
-  return exefile
+  link(objfile, outdir, platform)
 end
 
 RunResult = Data.define(:output, :status)
 
 def run(filename)
-  filename = "./#{filename}" unless filename.include?('/')
+  filename = "./#{filename}" unless filename.include?("/")
   output = `#{filename}`
   RunResult.new(output:, status: $?.exitstatus)
 end

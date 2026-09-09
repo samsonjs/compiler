@@ -1,29 +1,26 @@
-require 'asm/macho'
+require "asm/macho"
 
 module Assembler
-
   class MachOFile
-
     include MachO
 
     attr_accessor :header, :load_commands, :sections, :data
     attr_accessor :current_segment
 
-    def initialize(filetype=MH_OBJECT)
+    def initialize(filetype = MH_OBJECT)
       @header = MachHeader.new(MH_MAGIC, CPU_TYPE_X86, CPU_SUBTYPE_X86_ALL, filetype, 0, 0, 0)
       @load_commands = []              # All defined segments.
       @sections = {}                   # Map of segment names to lists of sections.
       @section_disk_size = Hash.new(0) # Sections store their VM size so we need their sizes on disk.
       @section_offset = 0              # Offset of the next section's data, in bytes.
       @data = []                       # Blobs of data that appear at the end of the file.
-                                       #  (text, data, relocation info, symtab, ...)
+      #  (text, data, relocation info, symtab, ...)
       @current_segment = nil           # An alias for the last defined segment.
       @text_segname = nil              # Name of __TEXT segement
       @text_sect_index = nil           # Index of __text section
       @text_data_index = nil           # Index into @data of __text section data
       @reloc_info = nil                # Copy of relocation info array
     end
-
 
     # Define a LoadCommand in this file.  The header's ncmds and sizeofcmds
     # fields are updated automatically to keep things in sync.  If a block is
@@ -38,15 +35,15 @@ module Assembler
     def load_command(cmdtype)
       struct = LoadCommandStructMap[cmdtype]
       unless struct
-        raise "unsupported load command type: #{cmdtype.inspect}," +
-              " supported types: #{LoadCommandStructMap.keys.sort.inspect}"
+        raise "unsupported load command type: #{cmdtype.inspect}," \
+          " supported types: #{LoadCommandStructMap.keys.sort.inspect}"
       end
 
       # Fill in all the unknown fields with 0, this is nonsense for
       # string fields but that doesn't really matter.
       dummy_vals = [0] * (struct::Members.size - 2)
 
-                         #   cmd        cmdsize          ...
+      #   cmd        cmdsize          ...
       command = struct.new(cmdtype, struct.bytesize, *dummy_vals)
 
       @load_commands << command
@@ -56,9 +53,8 @@ module Assembler
 
       yield(command) if block_given?
 
-      return command
+      command
     end
-
 
     # Define a segment in this file.  If a block is given it is passed
     # the new segment.  You can chain calls to segment, it returns self.
@@ -68,11 +64,10 @@ module Assembler
     def segment(name, &block)
       @current_segment = load_command(LC_SEGMENT) do |seg|
         seg[:segname] = name
-        block.call(seg) if block
+        block&.call(seg)
       end
-      return self
+      self
     end
-
 
     # Define a section under the given segment.  nsects and cmdsize are
     # updated automatically.  segname can't be derived from the segment
@@ -82,9 +77,8 @@ module Assembler
     # sections all defined under one anonymous segment, but their segment
     # names reflect their final positions after linking.  The linker plonks
     # them in the segment that they name.
-    def section(name, segname, data='', vmsize=data.size,
-                segment=@current_segment, type=S_REGULAR)
-
+    def section(name, segname, data = "", vmsize = data.size,
+      segment = @current_segment, type = S_REGULAR)
       # Create the new section.
       section = Section.new(name, segname, @section_offset, vmsize, 0, 0, 0, 0, 0, 0, type)
 
@@ -103,10 +97,8 @@ module Assembler
 
       yield(section) if block_given?
 
-      return section
+      section
     end
-
-
 
     # Define a standard text section under the current segment (if present).
     #
@@ -120,7 +112,7 @@ module Assembler
     # For MH_EXECUTE files the text section goes under the segment with the
     # name given (__TEXT).
 
-    def text(data, sectname='__text', segname='__TEXT')
+    def text(data, sectname = "__text", segname = "__TEXT")
       real_segname = nil
       unless @current_segment
         real_segname = segname_based_on_filetype(segname)
@@ -137,35 +129,35 @@ module Assembler
 
       # Remember where section and data are so we can update them later.
       @text_segname = real_segname || segname
-      @text_sect_index = @sections[@text_segname].length-1
-      @text_data_index = @data.length-1
+      @text_sect_index = @sections[@text_segname].length - 1
+      @text_data_index = @data.length - 1
 
-      return self
+      self
     end
 
     def update_text(data)
-      raise 'no __text segment defined yet' unless @text_data_index
+      raise "no __text segment defined yet" unless @text_data_index
       @data[@text_data_index] = data
     end
 
     # Basis for #data, #const, and #bss methods.
-    def segment_based_on_filetype(segname, options={})
+    def segment_based_on_filetype(segname, options = {})
       unless @current_segment
         permissions = VM_PROT_READ
-        permisions |= VM_PROT_WRITE if options.delete(:writable)
+        permisions | VM_PROT_WRITE if options.delete(:writable)
         segment(segname_based_on_filetype(segname)) do |seg|
           seg[:initprot] = seg[:maxprot] = permissions
         end
       end
       yield if block_given?
-      return self
+      self
     end
 
     # Define a standard data section under the current segment (if present).
     # This behaves similarly to the text method.
     #
-    def data(data, sectname='__data', segname='__DATA')
-      segment_based_on_filetype(segname, :writable => true) do
+    def data(data, sectname = "__data", segname = "__DATA")
+      segment_based_on_filetype(segname, writable: true) do
         section(sectname, segname, data)
       end
     end
@@ -173,7 +165,7 @@ module Assembler
     # Define a standard const section under the current segment (if present).
     # This behaves similarly to the data method.
     #
-    def const(data, sectname='__const', segname='__DATA')
+    def const(data, sectname = "__const", segname = "__DATA")
       segment_based_on_filetype(segname) do
         section(sectname, segname, data)
       end
@@ -184,9 +176,9 @@ module Assembler
     # of a blob, and no data is written to file since this section is for
     # uninitialized data.
     #
-    def bss(vmsize, sectname='__bss', segname='__DATA')
-      segment_based_on_filetype(segname, :writable => true) do
-        section(sectname, segname, '', vmsize)
+    def bss(vmsize, sectname = "__bss", segname = "__DATA")
+      segment_based_on_filetype(segname, writable: true) do
+        section(sectname, segname, "", vmsize)
       end
     end
 
@@ -196,12 +188,12 @@ module Assembler
     # Accepts an array of relocation info structs.
     def reloc(reloc_info)
       @data << if reloc_info.respond_to?(:join)
-                 reloc_info.map {|r| r.serialize}.join
-               else
-                 reloc_info
-               end
-      @reloc_info = reloc_info.map {|x| x.clone}
-      return self
+        reloc_info.map { |r| r.serialize }.join
+      else
+        reloc_info
+      end
+      @reloc_info = reloc_info.map { |x| x.clone }
+      self
     end
 
     # Define a symbol table.  This should usually be placed at the end of the
@@ -211,7 +203,7 @@ module Assembler
     # packed into a byte string (i.e. a C array) and a string table, or a
     # single parameter: any type of Symtab.
 
-    def symtab(nlist_ary_or_symtab, stab=nil)
+    def symtab(nlist_ary_or_symtab, stab = nil)
       if stab.nil?
         symtab = nlist_ary_or_symtab
         stab = symtab.stab
@@ -226,17 +218,16 @@ module Assembler
         # symoff and stroff are filled in when offsets are recalculated.
       end
 
-#       puts ">>> Defining symbol table:"
-#       puts ">>> #{nlist_ary.size} symbols"
-#       puts ">>> stab = #{stab.inspect}"
-#       puts ">>> nlist_ary = #{nlist_ary.inspect}"
-#       puts ">>> (serialized) = #{nlist_ary.map{|n|n.serialize}.join.inspect}"
+      #       puts ">>> Defining symbol table:"
+      #       puts ">>> #{nlist_ary.size} symbols"
+      #       puts ">>> stab = #{stab.inspect}"
+      #       puts ">>> nlist_ary = #{nlist_ary.inspect}"
+      #       puts ">>> (serialized) = #{nlist_ary.map{|n|n.serialize}.join.inspect}"
 
-      @data << nlist_ary.map {|n| n.serialize}.join
+      @data << nlist_ary.map { |n| n.serialize }.join
       @data << stab
-      return self
+      self
     end
-
 
     # Serialize the entire MachO file into a byte string.  This is simple
     # thanks to CStruct#serialize.
@@ -254,28 +245,30 @@ module Assembler
       ###################################
       @header.serialize +
 
-      #####################################
-      # Mach-O file Part 2: Load Commands #
-      #####################################
-      # dump each load command (which include the section headers under them)
-      @load_commands.map do |cmd|
-        sects = @sections[cmd[:segname]] rescue []
-        sects.inject(cmd.serialize) do |data, sect|
-          data + sect.serialize
-        end
-      end.join +
+        #####################################
+        # Mach-O file Part 2: Load Commands #
+        #####################################
+        # dump each load command (which include the section headers under them)
+        @load_commands.map do |cmd|
+          sects = begin
+            @sections[cmd[:segname]]
+          rescue
+            []
+          end
+          sects.inject(cmd.serialize) do |data, sect|
+            data + sect.serialize
+          end
+        end.join +
 
-      ###################################
-      # Mach-O file Part 3: Binary data #
-      ###################################
-      @data.join
+        ###################################
+        # Mach-O file Part 3: Binary data #
+        ###################################
+        @data.join
     end
-
 
     # Update the file offsets in segments and sections.
 
     def calculate_offsets
-
       # Maintain the offset into the the file on disk.  This is used
       # to update the various structures.
       offset = @header.bytesize
@@ -311,7 +304,6 @@ module Assembler
         offset += cmd[:cmdsize]
       end
 
-
       # offset now points to the end of the Mach-O headers, or the beginning
       # of the binary blobs of section data at the end.
 
@@ -331,9 +323,9 @@ module Assembler
         when LC_SYMTAB
           if @reloc_info
             # update text section with relocation info
-            __text = @sections[@text_segname][@text_sect_index]
-            __text[:reloff] = offset
-            __text[:nreloc] = @reloc_info.length
+            text_sect = @sections[@text_segname][@text_sect_index]
+            text_sect[:reloff] = offset
+            text_sect[:nreloc] = @reloc_info.length
             offset += @reloc_info.first.bytesize * @reloc_info.length
           end
           st = cmd
@@ -342,32 +334,26 @@ module Assembler
           st[:stroff] = offset
           offset += st[:strsize]
 
-
-        # No else clause is necessary, the first iteration should have caught them.
+          # No else clause is necessary, the first iteration should have caught them.
 
         end
-
       end # @load_commands.each
-
     end # def calculate_offsets
-
 
     #######
     private
+
     #######
 
     def segname_based_on_filetype(segname)
       case @header[:filetype]
       when MH_OBJECT
-        ''
+        ""
       when MH_EXECUTE
         segname
       else
         raise "unsupported MachO file type: #{@header.inspect}"
       end
     end
-
-
   end # class MachOFile
-
 end # module Assembler
