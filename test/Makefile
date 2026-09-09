@@ -16,6 +16,10 @@ endif
 all: $(FIXTURES)
 	@true
 
+# Record what every fixture prints, to review as a diff.
+bless: bless.rb
+	@for f in $(FIXTURES); do ./bless.rb $$f bin $(BINFORMAT) $(FORMAT) || exit 1; done
+
 # Build every fixture both ways and check the two back-ends emit the
 # same instructions.
 compare: compare.rb
@@ -81,4 +85,4 @@ bit_ops: test.rb test_bit_ops.code
 clean:
 	@rm -f bin/*
 
-.PHONY: all compare clean
+.PHONY: all bless compare clean

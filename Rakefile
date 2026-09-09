@@ -15,6 +15,11 @@ namespace :test do
   task :bin do
     sh "make -C test all FORMAT=bin"
   end
+
+  desc "Record what each fixture prints in its .expected file, to review as a diff"
+  task :bless do
+    sh "make -C test bless"
+  end
 end
 
 desc "Check that both back-ends emit the same instructions"
