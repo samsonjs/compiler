@@ -127,10 +127,12 @@ def build_asm(filename, outdir, platform='linux', binformat='elf')
   return exefile
 end
 
+RunResult = Data.define(:output, :status)
+
 def run(filename)
   filename = "./#{filename}" unless filename.include?('/')
-  `#{filename}`
-  return $?.exitstatus
+  output = `#{filename}`
+  RunResult.new(output:, status: $?.exitstatus)
 end
 
 main if $0 == __FILE__
