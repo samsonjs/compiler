@@ -1,6 +1,6 @@
 require "standard/rake"
 
-task default: %i[test standard]
+task default: %i[test compare standard]
 
 desc "Run the test suite through both back-ends"
 task test: %w[test:asm test:bin]
@@ -15,6 +15,11 @@ namespace :test do
   task :bin do
     sh "make -C test all FORMAT=bin"
   end
+end
+
+desc "Check that both back-ends emit the same instructions"
+task :compare do
+  sh "make -C test compare"
 end
 
 desc "Remove build products"

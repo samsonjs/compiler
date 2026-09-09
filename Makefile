@@ -1,4 +1,7 @@
 test:
 	cd test && make all
 
-.PHONY: test
+compare:
+	cd test && make compare
+
+.PHONY: test compare

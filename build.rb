@@ -23,7 +23,7 @@ def main
   outdir = ARGV.shift || '.'
   platform = `uname -s`.chomp.downcase
   binformat = (ARGV.shift || DefaultBinFormats[platform]).downcase
-  format = (ARGV.shift || 'asm').downcase
+  format = (ARGV.shift || 'bin').downcase
   puts "Building #{filename} for #{platform}, binformat is #{binformat}, format is #{format} ..."
   outfile = builder(format).call(filename, outdir, platform, binformat)
   puts outfile

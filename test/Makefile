@@ -1,6 +1,7 @@
 PLATFORM=$(shell uname -s)
 BINFORMAT="bin"
-FORMAT=asm
+FORMAT=bin
+FIXTURES=lt gt ge le eq neq or and bit_ops if while until repeat for do break print big huge
 ifeq ($(PLATFORM), Darwin)
 	BINFORMAT="macho"
 endif
@@ -12,8 +13,13 @@ ifeq ($(BINFORMAT), bin)
 	@echo "         Your platform, " $(PLATFORM) ", is unsupported."
 endif
 
-all: lt gt ge le eq neq or and bit_ops if while until repeat for do break print big huge
+all: $(FIXTURES)
 	@true
+
+# Build every fixture both ways and check the two back-ends emit the
+# same instructions.
+compare: compare.rb
+	@for f in $(FIXTURES); do ./compare.rb $$f bin $(BINFORMAT) || exit 1; done
 
 lt: test.rb test_lt.code
 	@./test.rb lt bin $(BINFORMAT) $(FORMAT)
@@ -75,4 +81,4 @@ bit_ops: test.rb test_bit_ops.code
 clean:
 	@rm -f bin/*
 
-.PHONY: clean
+.PHONY: all compare clean

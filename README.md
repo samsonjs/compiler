@@ -53,9 +53,9 @@ Compiling
 =========
 
 The build script should detect your platform.  If not append 'elf' or
-'macho' to the command.  The last argument picks the back-end: 'asm'
-(the default) generates assembly for nasm, 'bin' encodes the machine
-code and writes the object file in Ruby.
+'macho' to the command.  The last argument picks the back-end: 'bin'
+(the default) encodes the machine code and writes the object file
+itself, 'asm' generates assembly and hands it to nasm.
 
     % ./build.rb filename.code [outdir] [elf | macho] [asm | bin]
 
@@ -67,7 +67,12 @@ able it run it directly.
 Run the test suite with make, through either back-end.
 
     % make test
-    % make test FORMAT=bin
+    % make test FORMAT=asm
+
+nasm doubles as a check on our own encoder.  This builds every fixture
+both ways and compares the instructions that come out.
+
+    % make compare
 
 
 Syntax in 2 minutes

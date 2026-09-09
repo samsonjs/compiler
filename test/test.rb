@@ -9,7 +9,7 @@ def main
   outdir = ARGV.shift || '.'
   Dir.mkdir(outdir) unless File.exist?(outdir)
   binformat = (ARGV.shift || 'elf').downcase
-  format = (ARGV.shift || 'asm').downcase
+  format = (ARGV.shift || 'bin').downcase
   platform = `uname -s`.chomp.downcase
   print "testing #{func} ... "
   exefile = builder(format).call("test_#{func}.code", outdir, platform, binformat)
