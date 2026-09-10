@@ -19,9 +19,9 @@ module Compiler
         def initialize(platform)
           super
           @symtab = ASM::SymbolTable.new           # Only used to track names, nasm lays things out.
-          @data = ""
-          @bss = ""
-          @code = ""
+          @data = +""
+          @bss = +""
+          @code = +""
           @templatefile = "#{TEMPLATE_DIR}/template.#{platform}.asm"
           raise "unsupported platform: #{platform}" unless File.readable?(@templatefile)
         end

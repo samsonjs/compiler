@@ -14,7 +14,7 @@ module Compiler
           attr_reader :data
 
           def initialize
-            @data = "\0"
+            @data = +"\0"
             @index = {}
           end
 
@@ -97,7 +97,7 @@ module Compiler
             size: shstrtab.data.bytesize)
 
           # Section data follows the header, then the section header table.
-          blobs = ""
+          blobs = +""
           headers = []
           offset = Header.bytesize
           sections.each do |sect|

@@ -555,7 +555,7 @@ module Compiler
     # e
     def for_stmt
       name = get_name
-      counter = asm.defvar(name)
+      counter = asm.var!(name)
       match("=")
       boolean_expression                 # initial value
       asm.sub(EAX, 1)                    # pre-decrement because of the
@@ -829,7 +829,7 @@ module Compiler
     # true.
     def many(test)
       test = method(test) if test.is_a?(Symbol)
-      token = ""
+      token = +""
       while !eof? && test[@look]
         token << @look
         get_char
