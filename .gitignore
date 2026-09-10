@@ -3,4 +3,4 @@
 trash
 test/*.o
 test/*.asm
-test/bin/*
+test/tmp/
