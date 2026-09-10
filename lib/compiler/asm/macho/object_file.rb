@@ -4,7 +4,7 @@ module Compiler
       class ObjectFile
         include MachO
 
-        attr_accessor :header, :load_commands, :sections, :data
+        attr_accessor :header, :load_commands, :sections
         attr_accessor :current_segment
 
         def initialize(filetype = MH_OBJECT)
@@ -30,13 +30,13 @@ module Compiler
         # Other methods that create any type of load command should use this
         # method to do so.  Right now the only types supported are LC_SEGMENT
         # and LC_SYMTAB.  Modify asm/macho.rb to add structs for other types, and
-        # add them to LoadCommandStructMap.
+        # add them to LOAD_COMMAND_STRUCT_MAP.
 
         def load_command(cmdtype)
-          struct = LoadCommandStructMap[cmdtype]
+          struct = LOAD_COMMAND_STRUCT_MAP[cmdtype]
           unless struct
             raise "unsupported load command type: #{cmdtype.inspect}," \
-              " supported types: #{LoadCommandStructMap.keys.sort.inspect}"
+              " supported types: #{LOAD_COMMAND_STRUCT_MAP.keys.sort.inspect}"
           end
 
           # Fill in all the unknown fields with 0, this is nonsense for

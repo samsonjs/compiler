@@ -10,7 +10,7 @@ module Compiler
   class Parser
     include ASM::X86::Registers
 
-    Keywords = {
+    KEYWORDS = {
       "if" => :if_else_stmt,
       "while" => :while_stmt,
       "until" => :until_stmt,
@@ -24,7 +24,7 @@ module Compiler
     }
 
     # Grouped by precedence.
-    Ops = {
+    OPS = {
       add: %w[+ -],
       mul: %w[* /],
       rel: %w[== != < > <= >=],
@@ -33,16 +33,16 @@ module Compiler
       bit: %w[| ^ &],
       unary: %w[- +]
     }
-    # Op chars are chars that can begin an op, so OpChars needs to be a
+    # Op chars are chars that can begin an op, so OP_CHARS needs to be a
     # map of kinds of operators to a list of valid prefix chars.
-    OpChars = Ops.each_with_object({}) { |kv, hash|
+    OP_CHARS = OPS.each_with_object({}) { |kv, hash|
       key, val = *kv
       hash[key] = val.map { |op| op[0, 1] } # slice off first char for each op
       # Include :all for a very general test.
-    }.merge(all: Ops.values.flatten.map { |op| op[0, 1] }.sort.uniq)
+    }.merge(all: OPS.values.flatten.map { |op| op[0, 1] }.sort.uniq)
 
-    FALSE = 0
-    TRUE = -1
+    FALSE_VALUE = 0
+    TRUE_VALUE = -1
 
     attr_reader :asm
 
@@ -53,7 +53,7 @@ module Compiler
       @value = nil                 # Value of last read token.
       @input = input               # Stream to read from.
       @asm = asm                   # assembler
-      @keywords = Keywords.clone
+      @keywords = KEYWORDS.clone
       @keyword_names = @keywords.keys
       @label_stack = []
 
@@ -263,23 +263,23 @@ module Compiler
         scan
         expected("||") unless match_word("||")
 
-        false_label = asm.mklabel(:false)
+        false_label = asm.mklabel(:falsy)
         truthy_label = asm.mklabel(:truthy)
         done_label = asm.mklabel(:done)
 
-        asm.cmp(EAX, FALSE)
+        asm.cmp(EAX, FALSE_VALUE)
         asm.jne(truthy_label)
 
         boolean_term
-        asm.cmp(EAX, FALSE)
+        asm.cmp(EAX, FALSE_VALUE)
         asm.je(false_label)
 
         asm.deflabel(truthy_label)
-        asm.mov(EAX, TRUE)
+        asm.mov(EAX, TRUE_VALUE)
         asm.jmp(done_label)
 
         asm.deflabel(false_label)
-        asm.mov(EAX, FALSE)
+        asm.mov(EAX, FALSE_VALUE)
 
         asm.deflabel(done_label)
       end
@@ -290,21 +290,21 @@ module Compiler
       while @look == "&"
         scan
         expected("&&") unless match_word("&&")
-        false_label = asm.mklabel(:false)
+        false_label = asm.mklabel(:falsy)
         done_label = asm.mklabel(:done)
 
-        asm.cmp(EAX, FALSE)
+        asm.cmp(EAX, FALSE_VALUE)
         asm.je(false_label)
 
         not_factor
-        asm.cmp(EAX, FALSE)
+        asm.cmp(EAX, FALSE_VALUE)
         asm.je(false_label)
 
-        asm.mov(EAX, TRUE)
+        asm.mov(EAX, TRUE_VALUE)
         asm.jmp(done_label)
 
         asm.deflabel(false_label)
-        asm.mov(EAX, TRUE)
+        asm.mov(EAX, TRUE_VALUE)
 
         asm.deflabel(done_label)
       end
@@ -313,7 +313,7 @@ module Compiler
     def boolean_factor
       if boolean?(@look)
         if get_boolean == "true"
-          asm.mov(EAX, TRUE)
+          asm.mov(EAX, TRUE_VALUE)
         else
           asm.xor(EAX, EAX)
         end
@@ -338,9 +338,9 @@ module Compiler
     # semantically equivalent to !!reg in C or Ruby.
     def make_boolean(reg = EAX)
       end_label = asm.mklabel(:endmakebool)
-      asm.cmp(reg, FALSE)         # if false do nothing
+      asm.cmp(reg, FALSE_VALUE)         # if false do nothing
       asm.jz(end_label)
-      asm.mov(reg, TRUE)          # truthy, make it true
+      asm.mov(reg, TRUE_VALUE)          # truthy, make it true
       asm.deflabel(end_label)
     end
 
@@ -411,12 +411,12 @@ module Compiler
       asm.cmp(a, b)
       asm.jl(true_label)
 
-      asm.mov(EAX, FALSE)           # return false
+      asm.mov(EAX, FALSE_VALUE)           # return false
       asm.not_(EAX) if invert       # (or true if inverted)
       asm.jmp(end_label)
 
       asm.deflabel(true_label)
-      asm.mov(EAX, FALSE)           # return true
+      asm.mov(EAX, FALSE_VALUE)           # return true
       asm.not_(EAX) unless invert   # (or false if inverted)
 
       asm.deflabel(end_label)
@@ -726,11 +726,11 @@ module Compiler
     end
 
     def op_char?(char, kind = :all)
-      OpChars[kind].include?(char)
+      OP_CHARS[kind].include?(char)
     end
 
     def op?(kind, token)
-      Ops[kind].include?(token)
+      OPS[kind].include?(token)
     end
 
     # Read the next character from the input stream.

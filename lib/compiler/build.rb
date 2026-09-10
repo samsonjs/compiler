@@ -4,9 +4,9 @@ module Compiler
   module Build
     module_function
 
-    DefaultBinFormats = Hash.new("bin")
+    DEFAULT_BIN_FORMATS = Hash.new("bin")
     def binformat(p, f)
-      DefaultBinFormats[p] = f
+      DEFAULT_BIN_FORMATS[p] = f
     end
     binformat "darwin", "macho"
     binformat "linux", "elf"

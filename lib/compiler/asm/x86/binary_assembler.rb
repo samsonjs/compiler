@@ -20,30 +20,30 @@ module Compiler
         DEBUG_OUTPUT = false
 
         # 0.size gives the real answer, we only do x86-32 though
-        MachineBytes = 4
-        MachineBits = MachineBytes * 8
-        MinSigned = -1 * 2**(MachineBits - 1)
-        MaxSigned = 2**(MachineBits - 1) - 1
-        MinUnsigned = 0
-        MaxUnsigned = 2**MachineBits - 1
-        SignedInt = MinSigned..MaxSigned
-        SignedByte = -128..127
+        MACHINE_BYTES = 4
+        MACHINE_BITS = MACHINE_BYTES * 8
+        MIN_SIGNED = -1 * 2**(MACHINE_BITS - 1)
+        MAX_SIGNED = 2**(MACHINE_BITS - 1) - 1
+        MIN_UNSIGNED = 0
+        MAX_UNSIGNED = 2**MACHINE_BITS - 1
+        SIGNED_INT = MIN_SIGNED..MAX_SIGNED
+        SIGNED_BYTE = -128..127
 
         # This is used for encoding instructions.  Just as the equivalent
         # assembly would contain "BITS 32", binary is generated for 32-bit
         # protected mode.
-        DefaultOperandSize = :dword
+        DEFAULT_OPERAND_SIZE = :dword
 
-        SizeMap = {byte: 8, word: 16, dword: 32}
+        SIZE_MAP = {byte: 8, word: 16, dword: 32}
 
-        X86_start = {
+        X86_START = {
           "linux" => [],
           "darwin" => [0x55,                  # push ebp
             0x89, 0xe5,            # mov ebp, esp
             0x81, 0xec, 8, 0, 0, 0] # sub esp, 8
         }
 
-        X86_exit = {
+        X86_EXIT = {
           "linux" => [0x89, 0xc3,         # mov ebx, eax (exit code)
             0xb8, 1, 0, 0, 0,   # mov eax, 1
             0xcd, 0x80],          # int 0x80
@@ -83,11 +83,11 @@ module Compiler
           # beginning of the __TEXT segment, 0x0.
           @symtab.deflabel("_main", @ip)
 
-          X86_start[@platform].each { |byte| emit_byte(byte) }
+          X86_START[@platform].each { |byte| emit_byte(byte) }
         end
 
         def output
-          X86_exit[@platform].each { |byte| emit_byte(byte) }
+          X86_EXIT[@platform].each { |byte| emit_byte(byte) }
 
           byte_array = resolve_labels
 
@@ -197,7 +197,7 @@ module Compiler
         end
 
         # Define a variable with the given name and size in bytes.
-        def defvar(name, bytes = MachineBytes)
+        def defvar(name, bytes = MACHINE_BYTES)
           if @symtab.var?(name)
             warn "[warning] attempted to redefine #{name}"
           else
@@ -227,7 +227,7 @@ module Compiler
         end
 
         # Define a variable unless it exists.
-        def var!(name, bytes = MachineBytes)
+        def var!(name, bytes = MACHINE_BYTES)
           if var?(name)
             var(name)
           else
@@ -356,7 +356,7 @@ module Compiler
               elsif eff_addr.index? && eff_addr.index.is_a?(Numeric)
 
                 # disp8, mod == 01
-                if SignedByte === eff_addr.index
+                if SIGNED_BYTE === eff_addr.index
                   mod = 1
                   disp8 = eff_addr.index
 
@@ -432,13 +432,13 @@ module Compiler
           (scale << 6) | (index << 3) | base
         end
 
-        def register?(op, size = DefaultOperandSize)
+        def register?(op, size = DEFAULT_OPERAND_SIZE)
           op.is_a?(RegisterProxy) && op.size == size ||
-            op.respond_to?(:size) && op.size == SizeMap[size]
+            op.respond_to?(:size) && op.size == SIZE_MAP[size]
         end
 
-        def immediate?(op, size = DefaultOperandSize)
-          bits = SizeMap[size] || size
+        def immediate?(op, size = DEFAULT_OPERAND_SIZE)
+          bits = SIZE_MAP[size] || size
           op.is_a?(Numeric) && op >= -(2**bits / 2) && op <= (2**bits - 1)
         end
 
@@ -452,7 +452,7 @@ module Compiler
         #   * effective addresses (wrapped in an array to look like nasm code)
         #
         # XXX This method is pretty ugly.
-        def rm?(op, size = DefaultOperandSize)
+        def rm?(op, size = DEFAULT_OPERAND_SIZE)
           is_register = register?(op, size)
 
           if op.is_a?(Array)
@@ -476,7 +476,7 @@ module Compiler
           is_register || is_reg_or_mem || is_size_and_mem
         end
 
-        def offset?(addr, size = DefaultOperandSize)
+        def offset?(addr, size = DEFAULT_OPERAND_SIZE)
           addr.is_a?(Array) && (addr[0].is_a?(Numeric) || addr[0].is_a?(VariableProxy))
         end
 
@@ -803,7 +803,7 @@ module Compiler
 
         def shr(op, n)
           # shr r/m??, imm8
-          if SignedByte === n
+          if SIGNED_BYTE === n
 
             opcode = register?(op, :byte) ? 0xc0 : 0xc1
 
@@ -937,7 +937,7 @@ module Compiler
         end
 
         # These all jump near (rel32).
-        JccOpcodeMap = Hash.new { |key| raise "unsupported Jcc instruction: #{key}" }
+        JCC_OPCODE_MAP = Hash.new { |key| raise "unsupported Jcc instruction: #{key}" }
           .merge({
             jc: 0x82,  # carry            (CF=1)
             je: 0x84,  # equal            (ZF=1) --- same as jz
@@ -954,7 +954,7 @@ module Compiler
 
         # Only Jcc rel32 is supported.
         def jcc(instruction, label)
-          opcode = JccOpcodeMap[instruction]
+          opcode = JCC_OPCODE_MAP[instruction]
           asm do
             emit_byte(0x0f)
             emit_byte(opcode)
@@ -962,7 +962,7 @@ module Compiler
           end
         end
 
-        JccOpcodeMap.keys.each do |name|
+        JCC_OPCODE_MAP.keys.each do |name|
           define_method(name) do |label|
             jcc(name, label)
           end
@@ -994,7 +994,7 @@ module Compiler
         def loop_(label)
           real_ip = @ip + 2 # loop instruction is 2 bytes
           delta = @symtab.lookup_label(label) - real_ip
-          unless SignedByte === delta
+          unless SIGNED_BYTE === delta
             raise "LOOP can only jump -128 to 127 bytes, #{label} is #{delta} bytes away"
           end
 

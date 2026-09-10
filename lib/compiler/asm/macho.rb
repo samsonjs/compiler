@@ -87,7 +87,7 @@ module Compiler
         uint32 :strsize    # Size of the string table in bytes.
       end
 
-      LoadCommandStructMap = {
+      LOAD_COMMAND_STRUCT_MAP = {
         LC_SEGMENT => SegmentCommand,
         LC_SYMTAB => SymtabCommand
       }

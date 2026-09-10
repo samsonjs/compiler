@@ -58,7 +58,7 @@ module Compiler
       ###################
 
       # Size in bytes.
-      SizeMap = {
+      SIZE_MAP = {
         int8: 1,
         uint8: 1,
         int16: 2,
@@ -73,7 +73,7 @@ module Compiler
       }
 
       # 32-bit
-      PackMap = {
+      PACK_MAP = {
         int8: "c",
         uint8: "C",
         int16: "s",
@@ -90,8 +90,8 @@ module Compiler
         char: "C"
       }
 
-      # Only needed when unpacking is different from packing, i.e. strings w/ lambdas in PackMap.
-      UnpackMap = {
+      # Only needed when unpacking is different from packing, i.e. strings w/ lambdas in PACK_MAP.
+      UNPACK_MAP = {
         string: lambda do |str, *opts|
           len = opts.first
           val = str[0, len - 1].sub(/\0*$/, "")
@@ -155,7 +155,7 @@ module Compiler
 
         # Define a method for each size name, and when that method is called it updates
         # the struct class accordingly.
-        SizeMap.keys.each do |type|
+        SIZE_MAP.keys.each do |type|
           define_method(type) do |name, *args|
             name = name.to_sym
             const_get(:MemberIndex)[name] = const_get(:Members).size
@@ -177,7 +177,7 @@ module Compiler
         end
 
         def sizeof(name)
-          value = SizeMap[const_get(:MemberSizes)[name]]
+          value = SIZE_MAP[const_get(:MemberSizes)[name]]
           value.respond_to?(:call) ? value.call(*const_get(:MemberOptions)[name]) : value
         end
 
@@ -227,11 +227,11 @@ module Compiler
       end
 
       def pack_pattern
-        members.map { |name| PackMap[member_sizes[name]] }
+        members.map { |name| PACK_MAP[member_sizes[name]] }
       end
 
       def unpack_pattern
-        members.map { |name| UnpackMap[member_sizes[name]] || PackMap[member_sizes[name]] }
+        members.map { |name| UNPACK_MAP[member_sizes[name]] || PACK_MAP[member_sizes[name]] }
       end
 
       def [](name_or_idx)

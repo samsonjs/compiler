@@ -11,10 +11,10 @@ module Compiler
       # correct machine code, which isn't trivial.
       class TextAssembler < ASM::AssemblerBase
         # The nasm source templates live alongside this back-end.
-        TemplateDir = __dir__
+        TEMPLATE_DIR = __dir__
 
         # Operand size assumed when nasm can't infer one from a register.
-        DefaultOperandSize = :dword
+        DEFAULT_OPERAND_SIZE = :dword
 
         def initialize(platform)
           super
@@ -22,7 +22,7 @@ module Compiler
           @data = ""
           @bss = ""
           @code = ""
-          @templatefile = "#{TemplateDir}/template.#{platform}.asm"
+          @templatefile = "#{TEMPLATE_DIR}/template.#{platform}.asm"
           raise "unsupported platform: #{platform}" unless File.readable?(@templatefile)
         end
 
@@ -88,7 +88,7 @@ module Compiler
         # nasm can only infer the size of a memory operand from a
         # register, so spell it out when there isn't one.
         def operands(*ops)
-          default_size = DefaultOperandSize unless ops.any? { |op| op.is_a?(RegisterProxy) }
+          default_size = DEFAULT_OPERAND_SIZE unless ops.any? { |op| op.is_a?(RegisterProxy) }
           ops.map { |op| operand(op, default_size) }.join(", ")
         end
 
