@@ -18,7 +18,7 @@ def sh_warning_free(command)
   raise "#{warned.length} warnings from #{command}" unless warned.empty?
 end
 
-task default: %i[eager_load test compare standard]
+task default: %i[eager_load test compare test:macho standard]
 
 desc "Check every file defines the constant Zeitwerk expects from its path"
 task :eager_load do
@@ -37,6 +37,11 @@ namespace :test do
   desc "Run the test suite through the homegrown assembler"
   task :bin do
     sh_warning_free "make -C test all FORMAT=bin"
+  end
+
+  desc "Check the Mach-O writer emits a well formed object"
+  task :macho do
+    sh_warning_free "make -C test macho"
   end
 
   desc "Record what each fixture prints in its .expected file, to review as a diff"

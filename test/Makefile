@@ -19,6 +19,11 @@ endif
 all: $(FIXTURES)
 	@true
 
+# Check the Mach-O writer still emits a well formed object.  Nothing is
+# linked or run: the output is 32-bit x86 and this is a Linux runner.
+macho: macho.rb
+	@for f in $(FIXTURES); do ./macho.rb $$f $(OUTDIR) || exit 1; done
+
 # Record what every fixture prints, to review as a diff.
 bless: bless.rb
 	@for f in $(FIXTURES); do ./bless.rb $$f $(OUTDIR) $(BINFORMAT) $(FORMAT) || exit 1; done
@@ -88,4 +93,4 @@ bit_ops: test.rb test_bit_ops.code
 clean:
 	@rm -rf $(OUTDIR)
 
-.PHONY: all bless compare clean
+.PHONY: all bless compare macho clean
