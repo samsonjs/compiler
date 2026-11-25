@@ -1,0 +1,60 @@
+name: Gem bumps
+
+# Weekly pull requests for gem updates, one per gem, through the
+# bundle-bumps action; see its README entry in sjs/actions for how it keeps
+# them current. Each pull request runs CI like any other.
+#
+# The token is a personal access token in the GEM_BUMP_TOKEN secret: the job
+# token can push a branch but can't open a pull request.
+#
+# When Gemfile.lock changes on master, usually because a bump merged, the open
+# pull requests are rebuilt on it without opening new ones, so siblings
+# that touch the same dependencies stop conflicting. A merge queue that hits
+# a lockfile conflict dispatches this workflow with `pr` set, which rebuilds
+# just that pull request; each body names this file for it. The concurrency
+# group keeps a dispatched run and a push run from force-pushing over each
+# other.
+#
+# Gems go on a cache directory of their own, so this job's install never
+# shares one with a CI run going at the same time.
+on:
+  schedule:
+    - cron: "29 10 * * 1"
+  push:
+    branches: [master]
+    paths:
+      - "Gemfile.lock"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Rebuild only this pull request
+        required: false
+        default: ""
+
+concurrency:
+  group: gem-bumps
+
+jobs:
+  bump:
+    name: Open a pull request per gem
+    runs-on: docker
+    container:
+      image: docker.io/library/ruby:4.0
+      volumes:
+        - /home/forgejo-runner/cache/compiler-gems-bumps:/gems
+    timeout-minutes: 20
+    env:
+      BUNDLE_PATH: /gems
+    steps:
+      - name: Check out
+        uses: https://git.samhuri.net/sjs/actions/checkout@v1
+        with:
+          require-file: Gemfile.lock
+
+      - name: Open the pull requests
+        uses: https://git.samhuri.net/sjs/actions/bundle-bumps@v1
+        with:
+          token: ${{ secrets.GEM_BUMP_TOKEN }}
+          regenerate-workflow: gem-bumps.yml
+          pull-request: ${{ inputs.pr }}
+          rebuild-only: ${{ github.event_name == 'push' }}
